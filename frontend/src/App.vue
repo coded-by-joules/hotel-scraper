@@ -6,7 +6,7 @@
       @onSearchHotel="fetchHotels"
     ></search-box>
     <div class="mt-3 flex">
-      <keys-list></keys-list>
+      <keys-list :search-keys="searchLocations"></keys-list>
       <div class="border-l-2 border-black w-4/5 p-3">Right Side</div>
     </div>
   </main>
@@ -27,10 +27,20 @@ export default {
   data() {
     return {
       searchText: "",
+      searchLocations: [
+        { id: 1, location: "Alabama" },
+        { id: 2, location: "Alaska" },
+        { id: 3, location: "Colorado" },
+        { id: 4, location: "California" },
+        { id: 5, location: "Washington" },
+      ],
     };
   },
   methods: {
     fetchHotels() {},
+  },
+  created() {
+    console.log(this.searchLocations);
   },
 };
 </script>
