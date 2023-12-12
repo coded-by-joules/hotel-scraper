@@ -2,29 +2,34 @@ import asyncio
 from playwright.async_api import async_playwright, TimeoutError as PWTimeoutError
 import requests
 from page_scraper import scrape_list
-from urllib import parse
+import json
 from selectolax.parser import HTMLParser
 import httpx
 
-user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-api_url = "http://localhost:5000"
+with open("settings.json") as json_file:
+    settings = json.load(json_file)
+    api_url = settings['host']
+    user_agent = settings['user_agent']
+    proxies = None if settings['proxies'] == "" else settings['proxies']
+   
 site_url = "https://www.tripadvisor.com/"
 search_url = "https://www.tripadvisor.com/Search?q="
 
 
-def post_results(data, update_type, message):
-    return
+def post_results(data, update_type, message=None):
     headers = {"Content-Type": "application/json"}
     data = {"data": data, "update_type": update_type}
     status = 0
+    resp_message = message
 
-    if update_type != "postlog":
+    if update_type != "post_log":
         response = requests.post(
             f"{api_url}/post-results", headers=headers, json=data, verify=False)
         status = response.status_code
+        resp_message = response.json()['message']
 
-    log = {"message": message, "status": "SUCCESS" if status ==
-           200 else "ERROR", "update_type": update_type}
+    log = {"message": resp_message, "status": "SUCCESS" if status ==
+           200 else "ERROR", "update_type": "post_log"}
     requests.post(f"{api_url}/post-results",
                   headers=headers, json=log, verify=False)
 
@@ -75,8 +80,7 @@ async def getHotelUrls(full_link):
 
 
 async def main(search_text):
-    # full_link = get_hotel_url(search_text)
-    full_link = None
+    full_link = get_hotel_url(search_text)
     print(full_link)
     try:
         if full_link is None:
@@ -108,13 +112,13 @@ async def main(search_text):
                 f"No hotels found. Please try again when searching \"{search_text}\"")
 
         print("Getting hotel names")
-        hotel_list = await scrape_list(hotel_urls, user_agent)
+        hotel_list = await scrape_list(hotel_urls, user_agent, proxies)
         if len(hotel_list) == 0:
             raise ValueError(
                 f"Unable to fetch hotels. Please try again when searching \"{search_text}\"")
 
         # submit data to server
-        post_results(hotel_list, "send_hotel_list", "Hotels added to database")
+        post_results({"results": hotel_list, "search_text": search_text}, "send_hotel_list")
     except requests.exceptions.Timeout:
         message = f"Timeout error occured when searching \"{search_text}\""
         print(message)
@@ -135,7 +139,8 @@ async def main(search_text):
     except Exception as e:
         message = f"An unknown error has occured when searching \"{search_text}\""
         print(message)
+        print(e)
 
 
 if __name__ == "__main__":
-    asyncio.run(main("iowa"))
+    asyncio.run(main("alabama"))

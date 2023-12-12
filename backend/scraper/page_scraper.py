@@ -2,9 +2,6 @@ import httpx
 from selectolax.parser import HTMLParser
 import asyncio
 
-proxyStr = None
-
-
 async def get_data(client, hotel):
     resp = await client.get(hotel)
     page = HTMLParser(resp.text)
@@ -22,10 +19,10 @@ async def get_data(client, hotel):
             "url": hotel}
 
 
-async def scrape_list(list, user_agent):
+async def scrape_list(list, user_agent, proxies):
     headers = {"User-Agent": user_agent}
     valid_hotel_list = []
-    async with httpx.AsyncClient(headers=headers, proxies=proxyStr) as client:
+    async with httpx.AsyncClient(headers=headers, proxies=proxies) as client:
         tasks = []
         for item in list:
             tasks.append(asyncio.create_task(get_data(client, item)))

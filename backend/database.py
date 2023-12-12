@@ -27,7 +27,6 @@ class HotelInfo(db.Model):
     hotel_name: Mapped[str] = mapped_column(String(255), nullable=False)
     url: Mapped[str] = mapped_column(String(500), nullable=False)
     address: Mapped[str] = mapped_column(String(1000), nullable=True)
-    website: Mapped[str] = mapped_column(String(255), nullable=True)
     phone: Mapped[str] = mapped_column(String(255), nullable=True)
     created_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), default=datetime.now)
