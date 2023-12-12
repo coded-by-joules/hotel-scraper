@@ -5,9 +5,14 @@
       :search-text="searchText"
       @onSearchHotel="fetchHotels"
     ></search-box>
-    <div class="mt-3 flex">
+    <div class="mt-3 flex" v-if="searchLocations.length > 0">
       <keys-list :search-keys="searchLocations"></keys-list>
-      <div class="border-l-2 border-black w-4/5 p-3">Right Side</div>
+      <div class="border-l-2 border-black w-4/5 p-3">
+        <router-view></router-view>
+      </div>
+    </div>
+    <div class="mt-3 text-center" v-else>
+      <p>Please start searching locations.</p>
     </div>
   </main>
 </template>
@@ -16,6 +21,7 @@
 import TheHeader from "./components/TheHeader.vue";
 import SearchBox from "./components/SearchBox/SearchBox.vue";
 import KeysList from "./components/SearchKeys/KeysList.vue";
+import axios from "axios";
 
 export default {
   components: {
@@ -27,20 +33,20 @@ export default {
   data() {
     return {
       searchText: "",
-      searchLocations: [
-        { id: 1, location: "Alabama" },
-        { id: 2, location: "Alaska" },
-        { id: 3, location: "Colorado" },
-        { id: 4, location: "California" },
-        { id: 5, location: "Washington" },
-      ],
+      searchLocations: [],
     };
   },
-  methods: {
-    fetchHotels() {},
-  },
   created() {
-    console.log(this.searchLocations);
+    this.fetchHotels();
+  },
+  methods: {
+    fetchHotels() {
+      axios.get("http://localhost:7000/api/get-locations").then((response) => {
+        if (response.status === 200) {
+          this.searchLocations = response.data["locations"];
+        }
+      });
+    },
   },
 };
 </script>

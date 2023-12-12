@@ -4,7 +4,7 @@
       <key-item
         v-for="searchKey in searchKeys"
         :key="searchKey.id"
-        :location="searchKey.location"
+        :location="searchKey['search_key']"
         :active="isActive(searchKey.id)"
         @click="setActiveItem(searchKey.id)"
       ></key-item>
@@ -31,6 +31,7 @@ export default {
     isActive(item) {
       return this.activeKey == item;
     },
+    loadKeys() {},
   },
 };
 </script>

@@ -11,7 +11,7 @@ with open("settings.json") as json_file:
     api_url = settings['host']
     user_agent = settings['user_agent']
     proxies = None if settings['proxies'] == "" else settings['proxies']
-   
+
 site_url = "https://www.tripadvisor.com/"
 search_url = "https://www.tripadvisor.com/Search?q="
 
@@ -118,7 +118,8 @@ async def main(search_text):
                 f"Unable to fetch hotels. Please try again when searching \"{search_text}\"")
 
         # submit data to server
-        post_results({"results": hotel_list, "search_text": search_text}, "send_hotel_list")
+        post_results(
+            {"results": hotel_list, "search_text": search_text}, "send_hotel_list")
     except requests.exceptions.Timeout:
         message = f"Timeout error occured when searching \"{search_text}\""
         print(message)
@@ -143,4 +144,4 @@ async def main(search_text):
 
 
 if __name__ == "__main__":
-    asyncio.run(main("alabama"))
+    asyncio.run(main("iowa"))

@@ -1,6 +1,6 @@
 <template>
-  <div :class="['listItem', changeClass]">
-    {{ location }}
+  <div :class="['listItem', changeClass]" @click="">
+    <router-link :to="showLocation" class="block">{{ location }}</router-link>
   </div>
 </template>
 
@@ -10,6 +10,14 @@ export default {
   computed: {
     changeClass() {
       return { active: this.active, regular: !this.active };
+    },
+    showLocation() {
+      return { name: "hotel", params: { hotelName: this.location } };
+    },
+  },
+  methods: {
+    divClick() {
+      router.push(this.showLocation());
     },
   },
 };
