@@ -1,10 +1,7 @@
 <template>
   <the-header></the-header>
   <main class="container mx-auto p-5 max-w-screen-lg">
-    <search-box
-      :search-text="searchText"
-      @onSearchHotel="fetchHotels"
-    ></search-box>
+    <search-box @onSearchHotel="fetchHotels" :message="messageStr"></search-box>
     <div class="mt-3 flex" v-if="searchLocations.length > 0">
       <keys-list :search-keys="searchLocations"></keys-list>
       <div class="border-l-2 border-black w-4/5 p-3">
@@ -32,18 +29,71 @@ export default {
   emits: ["onSearchHotel"],
   data() {
     return {
-      searchText: "",
       searchLocations: [],
+      messageStr: "",
+      timerMessage: null,
     };
   },
   created() {
-    this.fetchHotels();
+    this.loadLocations();
+  },
+  provide() {
+    return {
+      locations: () => this.searchLocations,
+    };
   },
   methods: {
-    fetchHotels() {
+    clearMessage() {
+      this.messageStr = "";
+    },
+    fetchHotels(searchText) {
+      this.messageStr = "Scraping started successfully";
+      clearTimeout(this.timerMessage);
+      this.timerMessage = setTimeout(this.clearMessage, 3000);
+      axios
+        .post("http://localhost:7000/api/start-scraping", {
+          "search-text": encodeURIComponent(searchText),
+        })
+        .then((response) => {
+          if (response.status === 200) {
+            const existingLocation = this.searchLocations.findIndex((item) => {
+              return searchText === item["search_key"];
+            });
+
+            if (existingLocation < 0) {
+              this.searchLocations.push({
+                id: Math.random() * (99999, 10000) + 10000, // temp id
+                search_key: searchText,
+                savedInDB: false,
+              });
+            }
+
+            this.loadLocations();
+          }
+        });
+    },
+    loadLocations() {
       axios.get("http://localhost:7000/api/get-locations").then((response) => {
         if (response.status === 200) {
-          this.searchLocations = response.data["locations"];
+          const locations = response.data["locations"];
+
+          locations.forEach((location) => {
+            const existingIndex = this.searchLocations.findIndex((item) => {
+              return item["search_key"] === location["search_key"];
+            });
+
+            if (existingIndex >= 0) {
+              const existingLocation = this.searchLocations[existingIndex];
+              existingLocation["id"] = location["id"];
+              existingLocation["savedInDB"] = true;
+            } else {
+              this.searchLocations.push({
+                id: location["id"],
+                search_key: location["search_key"],
+                savedInDB: true,
+              });
+            }
+          });
         }
       });
     },

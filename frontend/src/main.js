@@ -13,8 +13,8 @@ const router = createRouter({
   routes: [
     { path: "/", component: HotelLoad },
     {
-      name: "hotel",
-      path: "/hotel/:hotelName",
+      name: "location",
+      path: "/location",
       component: HotelView,
       props: true,
     },

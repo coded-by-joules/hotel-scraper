@@ -1,7 +1,10 @@
 <template>
-  <div :class="['listItem', changeClass]" @click="">
-    <router-link :to="showLocation" class="block">{{ location }}</router-link>
-  </div>
+  <router-link
+    :class="['listItem', changeClass]"
+    :to="showLocation"
+    class="block"
+    >{{ location }}</router-link
+  >
 </template>
 
 <script>
@@ -12,20 +15,19 @@ export default {
       return { active: this.active, regular: !this.active };
     },
     showLocation() {
-      return { name: "hotel", params: { hotelName: this.location } };
+      return {
+        name: "location",
+        query: { key: this.location },
+      };
     },
   },
-  methods: {
-    divClick() {
-      router.push(this.showLocation());
-    },
-  },
+  methods: {},
 };
 </script>
 
 <style scoped>
 .listItem {
-  @apply truncate pl-2 py-2 pr-3 mb-3 rounded-tl rounded-br border-r-0 shadow text-sm cursor-pointer;
+  @apply block truncate pl-2 py-2 pr-3 mb-3 rounded-tl rounded-br border-r-0 shadow text-sm cursor-pointer;
 }
 
 .active {

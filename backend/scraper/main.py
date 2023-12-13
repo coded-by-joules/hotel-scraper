@@ -5,8 +5,13 @@ from page_scraper import scrape_list
 import json
 from selectolax.parser import HTMLParser
 import httpx
+import os
+import urllib.parse
 
-with open("settings.json") as json_file:
+settings_file = f"{os.path.abspath(__file__.replace('main.py', ''))}\settings.json"
+
+print(settings_file)
+with open(settings_file) as json_file:
     settings = json.load(json_file)
     api_url = settings['host']
     user_agent = settings['user_agent']
@@ -32,6 +37,9 @@ def post_results(data, update_type, message=None):
            200 else "ERROR", "update_type": "post_log"}
     requests.post(f"{api_url}/post-results",
                   headers=headers, json=log, verify=False)
+
+def postlog(message):
+    post_results(None, "post_log", message)
 
 
 def get_hotel_url(search_text):
@@ -80,7 +88,8 @@ async def getHotelUrls(full_link):
 
 
 async def main(search_text):
-    full_link = get_hotel_url(search_text)
+    decoded_search_text = urllib.parse.unquote_plus(search_text)
+    full_link = get_hotel_url(decoded_search_text)
     print(full_link)
     try:
         if full_link is None:
@@ -94,14 +103,14 @@ async def main(search_text):
                 await page.goto(f"{search_url}{search_text}", timeout=120000)
                 await page.wait_for_load_state()
 
-                hotel_link = await getHotelListPage(page, context, search_text)
+                hotel_link = await getHotelListPage(page, context, decoded_search_text)
                 if hotel_link in ["", None]:
                     raise ValueError(
-                        f"Hotel link is unavailable. Please try again when searching \"{search_text}\"")
+                        f"Hotel link is unavailable. Please try again when searching \"{decoded_search_text}\"")
 
                 full_link = f"{site_url}{hotel_link}"
-                post_results({"search_text": search_text, "base_url": full_link},
-                             "send_hotel_link", f"\"{search_text}\" search link added to database")
+                post_results({"search_text": decoded_search_text, "base_url": full_link},
+                             "send_hotel_link")
 
                 await browser.close()
 
@@ -109,38 +118,39 @@ async def main(search_text):
         hotel_urls = await getHotelUrls(full_link)
         if len(hotel_urls) == 0:
             raise ValueError(
-                f"No hotels found. Please try again when searching \"{search_text}\"")
+                f"No hotels found. Please try again when searching \"{decoded_search_text}\"")
 
         print("Getting hotel names")
         hotel_list = await scrape_list(hotel_urls, user_agent, proxies)
         if len(hotel_list) == 0:
             raise ValueError(
-                f"Unable to fetch hotels. Please try again when searching \"{search_text}\"")
+                f"Unable to fetch hotels. Please try again when searching \"{decoded_search_text}\"")
 
         # submit data to server
         post_results(
-            {"results": hotel_list, "search_text": search_text}, "send_hotel_list")
+            {"results": hotel_list, "search_text": decoded_search_text}, "send_hotel_list")
     except requests.exceptions.Timeout:
-        message = f"Timeout error occured when searching \"{search_text}\""
+        message = f"Timeout error occured when searching \"{decoded_search_text}\""
         print(message)
-        post_results(None, "postlog", message)
+        postlog(message)
     except httpx.RequestError:
         print(message)
-        message = f"There was an error occured during hotel search requests for \"{search_text}\""
-        post_results(None, "postlog", message)
+        message = f"There was an error occured during hotel search requests for \"{decoded_search_text}\""
+        postlog(message)
     except PWTimeoutError:
         await browser.close()
-        message = f"Timeout error occured when searching \"{search_text}\""
+        message = f"Timeout error occured when searching \"{decoded_search_text}\""
         print(message)
-        post_results(None, "postlog", message)
+        postlog(message)
     except ValueError as err:
-        message = f"An error occured when searching \"{search_text}\": {err.args[0]}"
+        message = f"An error occured when searching \"{decoded_search_text}\": {err.args[0]}"
         print(message)
-        post_results(None, "postlog", message)
+        postlog(message)
     except Exception as e:
-        message = f"An unknown error has occured when searching \"{search_text}\""
+        message = f"An unknown error has occured when searching \"{decoded_search_text}\""
         print(message)
         print(e)
+        postlog(message)
 
 
 if __name__ == "__main__":

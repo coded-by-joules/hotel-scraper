@@ -1,6 +1,7 @@
 from . import db
 from . database import *
 from flask import Blueprint, jsonify, request
+import subprocess
 
 api_routes = Blueprint("api", __name__)
 
@@ -25,20 +26,26 @@ def post_results():
         result_message = "Success"
         if update_type == "send_hotel_link":
             data = request.json.get('data')
+            search_text = data['search_text']
+
             exists = db.session.query(HotelSearchKeys.id).filter_by(
                 base_url=data['base_url']).first() is not None
             if not exists:
                 search_item = HotelSearchKeys(
-                    data['search_text'], data['base_url'])
+                    search_text, data['base_url'])
                 db.session.add(search_item)
                 db.session.commit()
+                result_message = f"Successfully added {search_text} to database"
+            else:
+                result_message = f"{search_text} already in database"
 
         if update_type == "send_hotel_list":
             data = request.json.get('data')
+            search_text = data['search_text']
+
             searchKeyItem = HotelSearchKeys.query.filter_by(
-                search_text=data['search_text']).first()
+                search_text=search_text).first()
             for result in data['results']:
-                print(result)
                 if result:
                     hotel = HotelInfo.query.filter_by(
                         hotel_name=result['name'], search_key=searchKeyItem.id).first()
@@ -54,6 +61,7 @@ def post_results():
                         hotel.address = result['address']
                         hotel.phone = result['phone']
             db.session.commit()
+            result_message = f"Hotels for {search_text} now added in database"
 
         if update_type == "post_log":
             message = request.json.get('message')
@@ -77,10 +85,12 @@ def get_locations():
     for location in locations:
         location_json.append({
             "id": location.id,
-            "search_key": location.search_text,
-            "base_url": location.base_url
+            "search_key": location.search_text
         })
+    
+    
     return jsonify({"locations": location_json}), 200
+    
 
 
 @api_routes.route('/get-hotels', methods=["GET"])
@@ -101,3 +111,12 @@ def get_hotels():
             return jsonify({"hotels": hotels}), 200
 
     return jsonify({"message": "No hotels found"}), 404
+
+@api_routes.route('/start-scraping', methods=["POST"])
+def start_scraping():
+    search_text = request.json.get('search-text')
+    
+    command = f"python ./backend/scraper/__init__.py {search_text}"
+    subprocess.Popen(command, shell=True)
+
+    return jsonify({"message": "Scraping started sucessfully"}), 200
