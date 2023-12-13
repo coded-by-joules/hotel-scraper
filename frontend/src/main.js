@@ -11,7 +11,7 @@ import HotelView from "./components/HotelsList/HotelView.vue";
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: "/", component: HotelLoad },
+    { path: "/", component: HotelLoad, name: "main" },
     {
       name: "location",
       path: "/location",

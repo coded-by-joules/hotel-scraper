@@ -5,7 +5,7 @@
     <div class="mt-3 flex" v-if="searchLocations.length > 0">
       <keys-list :search-keys="searchLocations"></keys-list>
       <div class="border-l-2 border-black w-4/5 p-3">
-        <router-view></router-view>
+        <router-view @onSearchHotel="fetchHotels"></router-view>
       </div>
     </div>
     <div class="mt-3 text-center" v-else>
@@ -40,16 +40,21 @@ export default {
   provide() {
     return {
       locations: () => this.searchLocations,
+      printMessage: (msg) => this.setMessage(msg),
     };
   },
   methods: {
     clearMessage() {
       this.messageStr = "";
     },
-    fetchHotels(searchText) {
-      this.messageStr = "Scraping started successfully";
+    setMessage(msg) {
+      this.messageStr = msg;
       clearTimeout(this.timerMessage);
-      this.timerMessage = setTimeout(this.clearMessage, 3000);
+      this.timerMessage = setTimeout(this.clearMessage, 5000);
+    },
+    fetchHotels(searchText) {
+      this.setMessage("Scraping started successfully");
+
       axios
         .post("http://localhost:7000/api/start-scraping", {
           "search-text": encodeURIComponent(searchText),
