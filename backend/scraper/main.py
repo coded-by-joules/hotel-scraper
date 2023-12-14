@@ -33,6 +33,7 @@ def post_results(data, update_type, message=None):
         status = response.status_code
         resp_message = response.json()['message']
 
+    # add a log
     log = {"message": resp_message, "status": "SUCCESS" if status ==
            200 else "ERROR", "update_type": "post_log"}
     requests.post(f"{api_url}/post-results",
@@ -41,6 +42,11 @@ def post_results(data, update_type, message=None):
 def postlog(message):
     post_results(None, "post_log", message)
 
+def end_scraping(search_text):
+    headers = {"Content-Type": "application/json"}
+    data = {"search_text": search_text}
+
+    requests.post(f"{api_url}/end-scraping", headers=headers, json=data, verify=False)    
 
 def get_hotel_url(search_text):
     if search_text in ["", None]:
@@ -59,7 +65,7 @@ def get_hotel_url(search_text):
 async def getHotelListPage(page, context, search_text):
     print(f"Searching for {search_text} on {page.url}")
     top_result = page.locator(
-        "div[data-widget-type='TOP_RESULT'] div.result-title")
+        "div[data-widget-type='TOP_RESULT'] div.result-title").first
     async with context.expect_page() as new_page_info:
         await top_result.click()
     new_page = await new_page_info.value
@@ -151,6 +157,8 @@ async def main(search_text):
         print(message)
         print(e)
         postlog(message)
+    finally:
+        end_scraping(search_text)
 
 
 if __name__ == "__main__":

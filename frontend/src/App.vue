@@ -2,9 +2,9 @@
   <the-header></the-header>
   <main class="container mx-auto p-5 max-w-screen-lg">
     <search-box @onSearchHotel="fetchHotels" :message="messageStr"></search-box>
-    <div class="mt-3 flex" v-if="searchLocations.length > 0">
+    <div class="mt-3" v-if="searchLocations.length > 0">
       <keys-list :search-keys="searchLocations"></keys-list>
-      <div class="border-l-2 border-black w-4/5 p-3">
+      <div class="p-3">
         <router-view @onSearchHotel="fetchHotels"></router-view>
       </div>
     </div>
@@ -71,10 +71,16 @@ export default {
                 search_key: searchText,
                 savedInDB: false,
               });
+            } else {
+              this.searchLocations[existingLocation].id = location["id"];
+              this.searchLocations[existingLocation].savedInDB = true;
             }
 
             this.loadLocations();
           }
+        })
+        .catch((error) => {
+          this.setMessage(error.response.data["message"]);
         });
     },
     loadLocations() {

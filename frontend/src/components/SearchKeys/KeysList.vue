@@ -1,6 +1,6 @@
 <template>
-  <div class="border-r-2 border-black w-1/5 pt-3 pl-3 pb-3">
-    <nav class="flex flex-col text-right justify-end">
+  <div class="border-b-2 border-black pt-3">
+    <nav class="flex flex-row justify-start grow">
       <key-item
         v-for="searchKey in searchKeys"
         :key="searchKey.id"

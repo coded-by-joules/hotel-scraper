@@ -1,5 +1,5 @@
 <template>
-  <div class="border-gray-400 border-b-2 p-4">
+  <div class="border-gray-400 border-b-2 p-4" id="top">
     <form @submit.prevent="formSubmit" class="flex justify-between">
       <input
         type="text"

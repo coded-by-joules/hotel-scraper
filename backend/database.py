@@ -50,3 +50,13 @@ class LogDetails(db.Model):
     def __init__(self, message, status):
         self.message = message
         self.status = status
+
+class SearchQueue(db.Model):
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    search_text: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="ONGOING")
+    created_date: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), default=datetime.now)
+    
+    def __init__(self, search_text):
+        self.search_text = search_text

@@ -19,11 +19,10 @@
       src="../../assets/loading.gif"
       class="w-20 mx-auto mt-5"
     />
-    <div
-      v-else-if="!loadingData && hotelList.length > 0"
-      class="mt-5 overflow-x-auto"
-    >
-      <table class="table-auto text-sm items-center border-collapse">
+    <div v-else-if="!loadingData && hotelList.length > 0" class="mt-5">
+      <table
+        class="table-fixed text-sm items-center border-collapse overflow-x-auto"
+      >
         <thead class="border-b-2 border-black">
           <tr>
             <th
@@ -46,7 +45,7 @@
         <tbody>
           <tr v-for="hotel in hotelList">
             <td
-              class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4 text-left text-blueGray-700"
+              class="font-bold underline text-blue-500 border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4 text-left text-blueGray-700"
             >
               <a :href="hotel['url']" target="_blank">{{
                 hotel["hotel_name"]
@@ -65,6 +64,12 @@
           </tr>
         </tbody>
       </table>
+      <a
+        href="#top"
+        class="inline-block mt-3 px-3 py-2 rounded text-white text-sm bg-green-500"
+      >
+        Back to top
+      </a>
     </div>
 
     <div class="mt-5" v-else></div>
@@ -108,13 +113,16 @@ export default {
         )
         .then((response) => {
           this.hotelList = response.data["hotels"];
+          console.log(this.hotelList);
           this.loadingData = false;
         })
         .catch((error) => {
           this.loadingData = false;
-          this.printMessage(
-            "Hotel list for this key was not found. Please add a new search"
-          );
+          if (this.savedInDB) {
+            this.printMessage(
+              "Hotel list for this key was not found. Please add a new search"
+            );
+          }
         });
     },
     updatePage(newHotel) {

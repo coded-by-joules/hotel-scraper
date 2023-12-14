@@ -106,17 +106,42 @@ def get_hotels():
                     "id": hotel.id,
                     "hotel_name": hotel.hotel_name,
                     "address": hotel.address,
-                    "phone": hotel.phone
+                    "phone": hotel.phone,
+                    "url": hotel.url
                 })
             return jsonify({"hotels": hotels}), 200
 
     return jsonify({"message": "No hotels found"}), 404
 
-@api_routes.route('/start-scraping', methods=["POST"])
-def start_scraping():
-    search_text = request.json.get('search-text')
-    
+def start_scraping(search_text):
+    new_task = SearchQueue(search_text)
+
     command = f"python ./backend/scraper/__init__.py {search_text}"
     subprocess.Popen(command, shell=True)
 
-    return jsonify({"message": "Scraping started sucessfully"}), 200
+    db.session.add(new_task)
+    db.session.commit()
+
+@api_routes.route('/start-scraping', methods=["POST"])
+def scrape_precheck():
+    search_text = request.json.get('search-text')
+
+    check_status = SearchQueue.query.filter_by(search_text=search_text).order_by(SearchQueue.created_date.desc()).first()
+    if check_status is None or check_status.status == "FINISHED":
+        start_scraping(search_text)
+        return jsonify({"message": f"Scraping for {search_text} started sucessfully"}), 200
+    else:
+        return jsonify({"message": "An existing scraping task is still ongoing. Please try again later"}), 500
+
+
+@api_routes.route('/end-scraping', methods=["POST"])
+def end_scraping():
+    search_text = request.json.get('search_text')
+    check_status = SearchQueue.query.filter_by(search_text=search_text).order_by(SearchQueue.created_date.desc()).first()
+
+    if check_status:
+        check_status.status = "FINISHED"
+        db.session.commit()
+        return jsonify({"message": f"Scraping for {search_text} is now finished"}), 200
+    
+    return jsonify({"message": "An error occured during scraping"}), 500

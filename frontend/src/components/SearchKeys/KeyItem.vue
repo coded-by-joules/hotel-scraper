@@ -21,13 +21,12 @@ export default {
       };
     },
   },
-  methods: {},
 };
 </script>
 
 <style scoped>
 .listItem {
-  @apply block truncate pl-2 py-2 pr-3 mb-3 rounded-tl rounded-br border-r-0 shadow text-sm cursor-pointer;
+  @apply truncate pl-2 py-2 pr-3 mb-3 rounded-tl rounded-br border-r-0 shadow text-sm cursor-pointer;
 }
 
 .active {
@@ -35,6 +34,6 @@ export default {
 }
 
 .regular {
-  @apply bg-green-300 font-bold;
+  @apply bg-green-300;
 }
 </style>
