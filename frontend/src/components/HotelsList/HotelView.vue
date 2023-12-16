@@ -1,6 +1,16 @@
 <template>
   <div v-if="hotelFound">
-    <h1 class="text-2xl font-bold">Hotels for "{{ hotelName }}"</h1>
+    <div class="flex justify-between">
+      <h1 class="text-2xl font-bold">Hotels for "{{ hotelName }}"</h1>
+      <div v-if="hotelList.length > 0 && !loadingData">
+        <button
+          class="rounded p-2 text-sm text-white bg-green-500"
+          @click="downloadData"
+        >
+          Download Data
+        </button>
+      </div>
+    </div>
 
     <p v-if="!savedInDB || hotelList.length == 0" class="mt-4 text-sm">
       The server is still scraping data for this search key. If you still see
@@ -148,6 +158,11 @@ export default {
     retrySearch() {
       this.$emit("onSearchHotel", this.hotelName);
       router.push({ name: "main" });
+    },
+    downloadData() {
+      window.open(
+        `http://localhost:7000/api/download-file?key=${this.hotelName}`
+      );
     },
   },
   watch: {

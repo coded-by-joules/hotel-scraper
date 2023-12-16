@@ -1,7 +1,9 @@
 from . import db
 from . database import *
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 import subprocess
+import pandas as pd
+from io import BytesIO
 
 api_routes = Blueprint("api", __name__)
 
@@ -87,31 +89,38 @@ def get_locations():
             "id": location.id,
             "search_key": location.search_text
         })
-    
-    
+
     return jsonify({"locations": location_json}), 200
-    
+
+
+def getHotels(key):
+    hotel_list = HotelSearchKeys.query.filter_by(
+        search_text=key).first()
+    if hotel_list:
+        hotels = []
+        for hotel in hotel_list.children:
+            hotels.append({
+                "id": hotel.id,
+                "hotel_name": hotel.hotel_name,
+                "address": hotel.address,
+                "phone": hotel.phone,
+                "url": hotel.url
+            })
+        return hotels
+    else:
+        return None
 
 
 @api_routes.route('/get-hotels', methods=["GET"])
 def get_hotels():
     search_key = request.args.get('key')
     if search_key:
-        hotel_list = HotelSearchKeys.query.filter_by(
-            search_text=search_key).first()
+        hotel_list = getHotels(search_key)
         if hotel_list:
-            hotels = []
-            for hotel in hotel_list.children:
-                hotels.append({
-                    "id": hotel.id,
-                    "hotel_name": hotel.hotel_name,
-                    "address": hotel.address,
-                    "phone": hotel.phone,
-                    "url": hotel.url
-                })
-            return jsonify({"hotels": hotels}), 200
+            return jsonify({"hotels": hotel_list}), 200
 
     return jsonify({"message": "No hotels found"}), 404
+
 
 def start_scraping(search_text):
     new_task = SearchQueue(search_text)
@@ -122,11 +131,13 @@ def start_scraping(search_text):
     db.session.add(new_task)
     db.session.commit()
 
+
 @api_routes.route('/start-scraping', methods=["POST"])
 def scrape_precheck():
     search_text = request.json.get('search-text')
 
-    check_status = SearchQueue.query.filter_by(search_text=search_text).order_by(SearchQueue.created_date.desc()).first()
+    check_status = SearchQueue.query.filter_by(search_text=search_text).order_by(
+        SearchQueue.created_date.desc()).first()
     if check_status is None or check_status.status == "FINISHED":
         start_scraping(search_text)
         return jsonify({"message": f"Scraping for {search_text} started sucessfully"}), 200
@@ -137,11 +148,31 @@ def scrape_precheck():
 @api_routes.route('/end-scraping', methods=["POST"])
 def end_scraping():
     search_text = request.json.get('search_text')
-    check_status = SearchQueue.query.filter_by(search_text=search_text).order_by(SearchQueue.created_date.desc()).first()
+    check_status = SearchQueue.query.filter_by(search_text=search_text).order_by(
+        SearchQueue.created_date.desc()).first()
 
     if check_status:
         check_status.status = "FINISHED"
         db.session.commit()
         return jsonify({"message": f"Scraping for {search_text} is now finished"}), 200
-    
+
     return jsonify({"message": "An error occured during scraping"}), 500
+
+
+@api_routes.route('/download-file', methods=['GET'])
+def download_file():
+    search_text = request.args.get('key')
+    if search_text:
+        hotel_list = getHotels(search_text)
+        if hotel_list:
+            data_dl = hotel_list
+
+            df = pd.DataFrame.from_dict(data_dl)
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                df.to_excel(writer, sheet_name=search_text, index=False)
+
+            output.seek(0)
+            return send_file(output, as_attachment=True, download_name=f"{search_text}.xlsx", mimetype="application/vnd.ms-excel")
+
+    return jsonify({"message": "An error occured during download"}), 500

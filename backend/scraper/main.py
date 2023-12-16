@@ -9,13 +9,19 @@ import os
 import urllib.parse
 
 settings_file = f"{os.path.abspath(__file__.replace('main.py', ''))}\settings.json"
+browser_url = None
 
-print(settings_file)
 with open(settings_file) as json_file:
     settings = json.load(json_file)
     api_url = settings['host']
     user_agent = settings['user_agent']
     proxies = None if settings['proxies'] == "" else settings['proxies']
+    username = None if settings['username'] == "" else settings['username']
+    password = None if settings['password'] == "" else settings['password']
+    wss_host = None if settings['wss_host'] == "" else settings['wss_host']
+    if username and password and wss_host:
+        browser_url = f"wss://{settings['username']}:{settings['password']}@{settings['wss_host']}"
+
 
 site_url = "https://www.tripadvisor.com/"
 search_url = "https://www.tripadvisor.com/Search?q="
@@ -39,14 +45,18 @@ def post_results(data, update_type, message=None):
     requests.post(f"{api_url}/post-results",
                   headers=headers, json=log, verify=False)
 
+
 def postlog(message):
     post_results(None, "post_log", message)
+
 
 def end_scraping(search_text):
     headers = {"Content-Type": "application/json"}
     data = {"search_text": search_text}
 
-    requests.post(f"{api_url}/end-scraping", headers=headers, json=data, verify=False)    
+    requests.post(f"{api_url}/end-scraping",
+                  headers=headers, json=data, verify=False)
+
 
 def get_hotel_url(search_text):
     if search_text in ["", None]:
@@ -102,7 +112,10 @@ async def main(search_text):
             browser = None
             async with async_playwright() as pw:
                 print("Connecting to browser")
-                browser = await pw.chromium.launch(slow_mo=2000)
+                if browser_url:
+                    browser = await pw.chromium.connect_over_cdp(browser_url)
+                else:
+                    browser = await pw.chromium.launch(slow_mo=100)
                 context = await browser.new_context(user_agent=user_agent)
                 page = await context.new_page()
                 print("Connecting to website")
