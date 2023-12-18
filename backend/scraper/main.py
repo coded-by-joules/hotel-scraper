@@ -102,6 +102,25 @@ async def getHotelUrls(full_link):
     hotel_urls = await asyncio.gather(*tasks, return_exceptions=True)
     return hotel_urls
 
+async def start_scraping(search_text, hotel_link):
+    decoded_search_text = urllib.parse.unquote_plus(search_text)
+
+    print("Getting hotel urls")
+    hotel_urls = await getHotelUrls(hotel_link)
+    if len(hotel_urls) == 0:
+        raise ValueError(
+            f"No hotels found. Please try again when searching \"{decoded_search_text}\"")
+
+    print("Getting hotel names")
+    hotel_list = await scrape_list(hotel_urls, user_agent, proxies)
+    if len(hotel_list) == 0:
+        raise ValueError(
+            f"Unable to fetch hotels. Please try again when searching \"{decoded_search_text}\"")
+
+    # submit data to server
+    post_results(
+        {"results": hotel_list, "search_text": decoded_search_text}, "send_hotel_list")
+
 
 async def main(search_text):
     decoded_search_text = urllib.parse.unquote_plus(search_text)
@@ -132,22 +151,9 @@ async def main(search_text):
                              "send_hotel_link")
 
                 await browser.close()
+        
+        await start_scraping(search_text, full_link)
 
-        print("Getting hotel urls")
-        hotel_urls = await getHotelUrls(full_link)
-        if len(hotel_urls) == 0:
-            raise ValueError(
-                f"No hotels found. Please try again when searching \"{decoded_search_text}\"")
-
-        print("Getting hotel names")
-        hotel_list = await scrape_list(hotel_urls, user_agent, proxies)
-        if len(hotel_list) == 0:
-            raise ValueError(
-                f"Unable to fetch hotels. Please try again when searching \"{decoded_search_text}\"")
-
-        # submit data to server
-        post_results(
-            {"results": hotel_list, "search_text": decoded_search_text}, "send_hotel_list")
     except requests.exceptions.Timeout:
         message = f"Timeout error occured when searching \"{decoded_search_text}\""
         print(message)

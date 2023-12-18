@@ -81,7 +81,7 @@ def post_results():
 
 @api_routes.route("/get-locations")
 def get_locations():
-    locations = HotelSearchKeys.query.all()
+    locations = HotelSearchKeys.query.order_by(HotelSearchKeys.search_text).all()
     location_json = []
 
     for location in locations:
