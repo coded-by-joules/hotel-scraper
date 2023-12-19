@@ -4,5 +4,6 @@
   "proxies": "",
   "wss_host": "",
   "username": "",
-  "password": ""
+  "password": "",
+  "depth_level": 50
 }

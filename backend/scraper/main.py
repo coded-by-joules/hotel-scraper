@@ -19,6 +19,7 @@ with open(settings_file) as json_file:
     username = None if settings['username'] == "" else settings['username']
     password = None if settings['password'] == "" else settings['password']
     wss_host = None if settings['wss_host'] == "" else settings['wss_host']
+    depth_level = settings['depth_level']
     if username and password and wss_host:
         browser_url = f"wss://{settings['username']}:{settings['password']}@{settings['wss_host']}"
 
