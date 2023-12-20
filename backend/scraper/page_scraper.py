@@ -2,6 +2,7 @@ import httpx
 from selectolax.parser import HTMLParser
 import asyncio
 
+
 async def get_data(client, hotel):
     try:
         resp = await client.get(hotel)
@@ -38,5 +39,5 @@ async def scrape_list(list, user_agent, proxies):
     for result in results:
         if result is not None and not isinstance(result, Exception):
             valid_hotel_list.append(result)
-            
+
     return valid_hotel_list

@@ -7,6 +7,7 @@ from selectolax.parser import HTMLParser
 import httpx
 import os
 import urllib.parse
+from hotel_link_generator import generate_paginated_hotels
 
 settings_file = f"{os.path.abspath(__file__.replace('main.py', ''))}\settings.json"
 browser_url = None
@@ -92,28 +93,52 @@ async def getHotelData(hotel):
     return f"{site_url}{url}"
 
 
-async def getHotelUrls(full_link):
-    r = requests.get(full_link, headers={"User-Agent": user_agent})
-    page = HTMLParser(r.text)
-    titles = page.css("div[data-automation='hotel-card-title']")
+async def getHotelUrls(client, full_link):
+    try:
+        r = await client.get(full_link)
+        if r.status_code == 200:
+            page = HTMLParser(r.text)
+            titles = page.css("div[data-automation='hotel-card-title']")
 
-    tasks = []
-    for title in titles:
-        tasks.append(asyncio.create_task(getHotelData(title)))
-    hotel_urls = await asyncio.gather(*tasks, return_exceptions=True)
-    return hotel_urls
+            tasks = []
+            for title in titles:
+                tasks.append(asyncio.create_task(getHotelData(title)))
+            hotel_urls = await asyncio.gather(*tasks, return_exceptions=True)
+            return hotel_urls
+        else:
+            return None
+    except httpx.TimeoutException:
+        return None
+
 
 async def start_scraping(search_text, hotel_link):
     decoded_search_text = urllib.parse.unquote_plus(search_text)
 
+    print("Start deep-search")
+    paginated_urls = await generate_paginated_hotels(hotel_link, site_url, user_agent, proxies, depth_level)
+    print("Collected URLs:", len(paginated_urls))
+
     print("Getting hotel urls")
-    hotel_urls = await getHotelUrls(hotel_link)
+    tasks = []
+    async with httpx.AsyncClient(headers={"User-Agent": user_agent}, proxies=proxies, verify=False) as client:
+        for url in paginated_urls:
+            tasks.append(asyncio.create_task(getHotelUrls(client, url)))
+        extracted_hotel_urls = await asyncio.gather(*tasks, return_exceptions=True)
+
+    hotel_urls = []
+    for hotel_url in extracted_hotel_urls:
+        if hotel_url is not None and not isinstance(hotel_url, Exception):
+            hotel_urls.append(hotel_url)
+
+    print("Raw list:", len(hotel_urls))
     if len(hotel_urls) == 0:
         raise ValueError(
             f"No hotels found. Please try again when searching \"{decoded_search_text}\"")
 
+    final_hotel_urls = [x for xs in hotel_urls for x in xs]
+    print("Flattened:", len(final_hotel_urls))
     print("Getting hotel names")
-    hotel_list = await scrape_list(hotel_urls, user_agent, proxies)
+    hotel_list = await scrape_list(final_hotel_urls, user_agent, proxies)
     if len(hotel_list) == 0:
         raise ValueError(
             f"Unable to fetch hotels. Please try again when searching \"{decoded_search_text}\"")
@@ -152,7 +177,7 @@ async def main(search_text):
                              "send_hotel_link")
 
                 await browser.close()
-        
+
         await start_scraping(search_text, full_link)
 
     except requests.exceptions.Timeout:
@@ -182,4 +207,4 @@ async def main(search_text):
 
 
 if __name__ == "__main__":
-    asyncio.run(main("iowa"))
+    asyncio.run(main("florida"))
