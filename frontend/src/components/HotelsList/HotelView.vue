@@ -29,7 +29,7 @@
       src="../../assets/loading.gif"
       class="w-20 mx-auto mt-5"
     />
-    <div v-else-if="!loadingData && hotelList.length > 0" class="mt-5">
+    <div v-else-if="!loadingData && hotelList.length > 0" class="mt-5 mx-auto">
       <table
         class="table-fixed text-sm items-center border-collapse overflow-x-auto"
       >

@@ -12,7 +12,7 @@ class HotelSearchKeys(db.Model):
         String(255), nullable=False, unique=True)
     base_url: Mapped[str] = mapped_column(String(500), nullable=False)
     children: Mapped[List["HotelInfo"]] = relationship(
-        backref="searchkey", lazy=True)
+        backref="searchkey", lazy="dynamic")
 
     def __init__(self, search_text, base_url):
         self.search_text = search_text

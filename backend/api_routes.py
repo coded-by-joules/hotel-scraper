@@ -1,6 +1,7 @@
 from . import db
 from . database import *
 from flask import Blueprint, jsonify, request, send_file
+from flask_sqlalchemy import SQLAlchemy
 import subprocess
 import pandas as pd
 from io import BytesIO
@@ -93,12 +94,17 @@ def get_locations():
     return jsonify({"locations": location_json}), 200
 
 
-def getHotels(key):
+def getHotels(key, page=1):
     hotel_list = HotelSearchKeys.query.filter_by(
         search_text=key).first()
     if hotel_list:
         hotels = []
-        for hotel in hotel_list.children:
+        if page == "all":
+            resultPage = hotel_list.children
+        else:
+            resultPage = db.paginate(hotel_list.children, page=page, per_page=30).items
+        
+        for hotel in resultPage:
             hotels.append({
                 "id": hotel.id,
                 "hotel_name": hotel.hotel_name,
@@ -114,8 +120,9 @@ def getHotels(key):
 @api_routes.route('/get-hotels', methods=["GET"])
 def get_hotels():
     search_key = request.args.get('key')
+    page_level = request.args.get('page') or 1
     if search_key:
-        hotel_list = getHotels(search_key)
+        hotel_list = getHotels(search_key, int(page_level))
         if hotel_list:
             return jsonify({"hotels": hotel_list}), 200
 
@@ -163,7 +170,7 @@ def end_scraping():
 def download_file():
     search_text = request.args.get('key')
     if search_text:
-        hotel_list = getHotels(search_text)
+        hotel_list = getHotels(search_text, "all")
         if hotel_list:
             data_dl = hotel_list
 
