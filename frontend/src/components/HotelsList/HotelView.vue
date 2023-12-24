@@ -74,12 +74,18 @@
           </tr>
         </tbody>
       </table>
-      <a
-        href="#top"
-        class="inline-block mt-3 px-3 py-2 rounded text-white text-sm bg-green-500"
-      >
-        Back to top
-      </a>
+      <div class="flex justify-between">
+        <a
+          href="#top"
+          class="inline-block mt-3 px-3 py-2 rounded text-white text-sm bg-green-500"
+        >
+          Back to top
+        </a>
+        <div>
+          <router-link :to="pageNav('prev')" class="inline-block mt-3 px-3 py-2 mr-4 rounded text-white text-sm bg-green-500" v-if="currentPage > 1">&lt; Previous</router-link>
+          <router-link :to="pageNav('next')" class="inline-block mt-3 px-3 py-2 mr-4 rounded text-white text-sm bg-green-500" v-if="currentPage < maxPages">Next &gt;</router-link>
+        </div>
+      </div>
     </div>
 
     <div class="mt-5" v-else></div>
@@ -103,6 +109,8 @@ export default {
       hotelFound: false,
       loadingData: true,
       hotelList: [],
+      currentPage: 1,
+      maxPages: null,
     };
   },
   computed: {
@@ -111,7 +119,7 @@ export default {
     },
   },
   methods: {
-    loadHotels() {
+    loadHotels(newPage) {
       const search_key = encodeURIComponent(this.hotelName);
       this.loadingData = true;
       this.hotelList = [];
@@ -119,12 +127,14 @@ export default {
       axios
         .get(
           "http://localhost:7000/api/get-hotels?key=" +
-            encodeURIComponent(search_key)
+            encodeURIComponent(search_key) + "&page=" + newPage
         )
         .then((response) => {
           this.hotelList = response.data["hotels"];
-          console.log(this.hotelList);
           this.loadingData = false;
+          this.currentPage = parseInt(newPage,10);
+          this.maxPages = response.data["max_page"];
+          console.log(response.data);
         })
         .catch((error) => {
           this.loadingData = false;
@@ -135,7 +145,7 @@ export default {
           }
         });
     },
-    updatePage(newHotel) {
+    updatePage(newHotel, newPage) {
       this.hotelName = newHotel;
       this.savedInDB = false;
       this.hotelFound = false;
@@ -150,7 +160,7 @@ export default {
         this.hotelFound = true;
         if (locationItem["savedInDB"]) this.savedInDB = true;
 
-        this.loadHotels();
+        this.loadHotels(newPage || 1);
       } else {
         this.hotelFound = false;
       }
@@ -164,10 +174,19 @@ export default {
         `http://localhost:7000/api/download-file?key=${this.hotelName}`
       );
     },
+    pageNav(dir) {
+
+      return {
+        "name": "location",
+        "query": { key: this.hotelName, page: dir === "prev" ? this.currentPage - 1 : this.currentPage + 1}
+      };
+    }
   },
   watch: {
     $route(newRoute) {
-      this.updatePage(newRoute.query.key);
+      const page = newRoute.query.page || 1;
+
+      this.updatePage(newRoute.query.key, page);
     },
   },
   created() {

@@ -99,10 +99,12 @@ def getHotels(key, page=1):
         search_text=key).first()
     if hotel_list:
         hotels = []
+        resPaginator = None
         if page == "all":
             resultPage = hotel_list.children
         else:
-            resultPage = db.paginate(hotel_list.children, page=page, per_page=30).items
+            resPaginator = db.paginate(hotel_list.children, page=page, per_page=30)
+            resultPage = resPaginator.items
         
         for hotel in resultPage:
             hotels.append({
@@ -112,7 +114,7 @@ def getHotels(key, page=1):
                 "phone": hotel.phone,
                 "url": hotel.url
             })
-        return hotels
+        return {"hotels": hotels, "max_page": resPaginator.pages if resPaginator else 0}
     else:
         return None
 
@@ -124,7 +126,7 @@ def get_hotels():
     if search_key:
         hotel_list = getHotels(search_key, int(page_level))
         if hotel_list:
-            return jsonify({"hotels": hotel_list}), 200
+            return jsonify(hotel_list), 200
 
     return jsonify({"message": "No hotels found"}), 404
 
