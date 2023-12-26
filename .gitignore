@@ -14,6 +14,7 @@ dist-ssr
 .venv
 __pycache__
 instance
+.frontend__old
 
 # Editor directories and files
 .vscode/*

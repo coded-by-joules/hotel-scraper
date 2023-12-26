@@ -4,7 +4,7 @@
       <input
         type="text"
         id="searchBox"
-        class="border-gray-700 border-solid border-2 p-2 rounded w-3/4"
+        class="border-gray-700 border-solid border-b-2 p-2 rounded w-3/4 outline-none text-white bg-transparent"
         name="Search"
         placeholder="Enter a location"
         v-model="searchStr"
@@ -16,18 +16,11 @@
         Search
       </button>
     </form>
-    <p
-      class="mt-3 p-2 border-green-300 bg-green-200 rounded border-2"
-      v-if="message !== ''"
-    >
-      {{ message }}
-    </p>
   </div>
 </template>
 
 <script>
 export default {
-  props: ["message"],
   data() {
     return {
       searchStr: "",
@@ -36,7 +29,7 @@ export default {
   methods: {
     formSubmit() {
       if (this.searchStr !== "") {
-        this.$emit("onSearchHotel", this.searchStr);
+        this.$emit("onStartSearch", this.searchStr);
         this.searchStr = "";
       }
     },
