@@ -12,6 +12,7 @@
 import TheHeader from "./components/TheHeader.vue";
 import SearchBox from "./components/SearchBox.vue";
 import LocationList from "./components/LocationItems/LocationList.vue";
+import axios from "axios";
 
 export default {
   components: {
@@ -27,8 +28,60 @@ export default {
   },
   methods: {
     addSearch(item) {
-      this.searchLocations.push({ status: "loaded", location: item });
+      const existingItem = this.searchLocations.findIndex(
+        (loc) => item === loc.location
+      );
+
+      if (existingItem < 0) {
+        const id = Math.random() * (99999, 10000) + 10000; // temp id
+        this.searchLocations.push({
+          status: "ongoing",
+          location: item,
+          count: "0",
+          id: id,
+        });
+
+        setTimeout(() => {
+          this.searchLocations.forEach((location) => {
+            if (location.id === id) location.status = "loaded";
+          });
+        }, 3000);
+      }
     },
+    loadLocations() {
+      const getData = async () => {
+        try {
+          const resp = await axios.get(
+            "http://localhost:7000/api/get-locations"
+          );
+          return resp;
+        } catch (err) {
+          console.log(err);
+          return false;
+        }
+      };
+
+      getData().then((resp) => {
+        if (resp === false) {
+          alert("There's an error when fetching locations. Please try again");
+        } else {
+          if (resp.status === 200) {
+            const locations = resp.data["locations"];
+            locations.forEach(({ count, id, search_key }) => {
+              this.searchLocations.push({
+                id: id,
+                location: search_key,
+                count: count,
+                status: "loaded",
+              });
+            });
+          }
+        }
+      });
+    },
+  },
+  created() {
+    this.loadLocations();
   },
 };
 </script>

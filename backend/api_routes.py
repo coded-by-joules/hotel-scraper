@@ -82,13 +82,15 @@ def post_results():
 
 @api_routes.route("/get-locations")
 def get_locations():
-    locations = HotelSearchKeys.query.order_by(HotelSearchKeys.search_text).all()
+    locations = HotelSearchKeys.query.order_by(
+        HotelSearchKeys.search_text).all()
     location_json = []
 
     for location in locations:
         location_json.append({
             "id": location.id,
-            "search_key": location.search_text
+            "search_key": location.search_text,
+            "count": location.children.count()
         })
 
     return jsonify({"locations": location_json}), 200
@@ -103,9 +105,10 @@ def getHotels(key, page=1):
         if page == "all":
             resultPage = hotel_list.children
         else:
-            resPaginator = db.paginate(hotel_list.children, page=page, per_page=30)
+            resPaginator = db.paginate(
+                hotel_list.children, page=page, per_page=30)
             resultPage = resPaginator.items
-        
+
         for hotel in resultPage:
             hotels.append({
                 "id": hotel.id,
@@ -134,11 +137,14 @@ def get_hotels():
 def start_scraping(search_text):
     new_task = SearchQueue(search_text)
 
-    command = f"python ./backend/scraper/__init__.py {search_text}"
-    subprocess.Popen(command, shell=True)
-
     db.session.add(new_task)
     db.session.commit()
+
+    command = f"python ./backend/scraper/__init__.py {search_text}"
+    process = subprocess.Popen(command, shell=True)
+    result = process.wait()
+
+    return result
 
 
 @api_routes.route('/start-scraping', methods=["POST"])
@@ -148,8 +154,17 @@ def scrape_precheck():
     check_status = SearchQueue.query.filter_by(search_text=search_text).order_by(
         SearchQueue.created_date.desc()).first()
     if check_status is None or check_status.status == "FINISHED":
-        start_scraping(search_text)
-        return jsonify({"message": f"Scraping for {search_text} started sucessfully"}), 200
+        result = start_scraping(search_text)
+
+        if result == 0:
+            hotel_list = getHotels(search_text, "all")
+
+            if hotel_list:
+                return jsonify({"message": "Scraping successfull", "count": len(hotel_list['hotels'])}), 200
+            else:
+                return jsonify({"message": "There are no hotels for this search key", "count": 0}), 200
+        else:
+            return jsonify({"message": "There's an error occured while searching the key. Please try it again"}), 500
     else:
         return jsonify({"message": "An existing scraping task is still ongoing. Please try again later"}), 500
 
@@ -174,7 +189,7 @@ def download_file():
     if search_text:
         hotel_list = getHotels(search_text, "all")
         if hotel_list:
-            data_dl = hotel_list
+            data_dl = hotel_list["hotels"]
 
             df = pd.DataFrame.from_dict(data_dl)
             output = BytesIO()

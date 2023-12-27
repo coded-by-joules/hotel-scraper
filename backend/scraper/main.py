@@ -8,6 +8,7 @@ import httpx
 import os
 import urllib.parse
 from hotel_link_generator import generate_paginated_hotels
+import sys
 
 settings_file = f"{os.path.abspath(__file__.replace('main.py', ''))}\settings.json"
 browser_url = None
@@ -151,7 +152,9 @@ async def start_scraping(search_text, hotel_link):
 async def main(search_text):
     decoded_search_text = urllib.parse.unquote_plus(search_text)
     full_link = get_hotel_url(decoded_search_text)
+    exit_code = 0
     print(full_link)
+
     try:
         if full_link is None:
             browser = None
@@ -184,26 +187,32 @@ async def main(search_text):
         message = f"Timeout error occured when searching \"{decoded_search_text}\""
         print(message)
         postlog(message)
+        exit_code = 1
     except httpx.RequestError:
         print(message)
         message = f"There was an error occured during hotel search requests for \"{decoded_search_text}\""
         postlog(message)
+        exit_code = 1
     except PWTimeoutError:
         await browser.close()
         message = f"Timeout error occured when searching \"{decoded_search_text}\""
         print(message)
         postlog(message)
+        exit_code = 1
     except ValueError as err:
         message = f"An error occured when searching \"{decoded_search_text}\": {err.args[0]}"
         print(message)
         postlog(message)
+        exit_code = 1
     except Exception as e:
         message = f"An unknown error has occured when searching \"{decoded_search_text}\""
         print(message)
         print(e)
         postlog(message)
+        exit_code = 1
     finally:
         end_scraping(search_text)
+        sys.exit(exit_code)
 
 
 if __name__ == "__main__":
