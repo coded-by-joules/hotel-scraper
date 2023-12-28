@@ -14,6 +14,12 @@ import SearchBox from "./components/SearchBox.vue";
 import LocationList from "./components/LocationItems/LocationList.vue";
 import axios from "axios";
 
+const getLocationById = (arr, id) => {
+  const locationItem = arr.findIndex((item) => item.id === id);
+
+  return locationItem;
+};
+
 export default {
   components: {
     "the-header": TheHeader,
@@ -27,6 +33,22 @@ export default {
     };
   },
   methods: {
+    startSraping: async (item) => {
+      try {
+        const resp = await axios.post(
+          "http://localhost:7000/api/start-scraping",
+          {
+            "search-text": item.location,
+          }
+        );
+
+        return resp;
+      } catch (err) {
+        console.log(err);
+        return false;
+      }
+    },
+
     addSearch(item) {
       const existingItem = this.searchLocations.findIndex(
         (loc) => item === loc.location
@@ -34,18 +56,29 @@ export default {
 
       if (existingItem < 0) {
         const id = Math.random() * (99999, 10000) + 10000; // temp id
-        this.searchLocations.push({
+        const newItem = {
           status: "ongoing",
           location: item,
           count: "0",
           id: id,
-        });
+        };
+        const locationList = this.searchLocations;
+        locationList.push(newItem);
 
-        setTimeout(() => {
-          this.searchLocations.forEach((location) => {
-            if (location.id === id) location.status = "loaded";
-          });
-        }, 3000);
+        this.startSraping(newItem).then((response) => {
+          const itemIndex = getLocationById(locationList, newItem.id);
+
+          if (response === false) {
+            locationList[itemIndex].status = "error";
+          } else {
+            const fetchedItem = response.data;
+
+            locationList[itemIndex].status = "loaded";
+            locationList[itemIndex].count = fetchedItem["count"];
+          }
+        });
+      } else {
+        alert("Search key already exists.");
       }
     },
     loadLocations() {

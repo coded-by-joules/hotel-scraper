@@ -1,10 +1,30 @@
 <template>
   <div :class="setupClass()" :key="location.id">
     <div class="px-3">
-      {{ location.location }} |
-      <span class="text-sm font-normal">{{ location.count }} hotels</span>
+      <span class="font-semibold">{{ location.location }}</span> |
+      <span class="text-sm font-normal">{{ hotelStatus }}</span>
     </div>
     <div class="flex justify-end">
+      <a
+        href="#"
+        class="flex items-center justify-center hover:bg-blue-500 w-8"
+        v-if="location.status !== 'ongoing'"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="1.5"
+          stroke="currentColor"
+          class="w-6 h-6"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
+          />
+        </svg>
+      </a>
       <a
         href="#"
         class="flex items-center justify-center hover:bg-green-800 w-8"
@@ -49,6 +69,17 @@
 <script>
 export default {
   props: ["location"],
+  computed: {
+    hotelStatus() {
+      if (this.location.status === "loaded") {
+        return `${this.location.count} hotel(s)`;
+      } else if (this.location.status === "error") {
+        return "error occured while scraping this location";
+      } else {
+        return "scraping...";
+      }
+    },
+  },
   methods: {
     setupClass() {
       return ["item", this.location.status];
@@ -73,6 +104,10 @@ export default {
 }
 
 .loaded {
-  @apply bg-green-600 font-semibold;
+  @apply bg-green-600;
+}
+
+.error {
+  @apply bg-red-700;
 }
 </style>
