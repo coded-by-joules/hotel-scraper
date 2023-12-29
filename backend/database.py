@@ -12,7 +12,7 @@ class HotelSearchKeys(db.Model):
         String(255), nullable=False, unique=True)
     base_url: Mapped[str] = mapped_column(String(500), nullable=False)
     children: Mapped[List["HotelInfo"]] = relationship(
-        backref="searchkey", lazy="dynamic")
+        backref="searchkey", lazy="dynamic", cascade="all, delete")
 
     def __init__(self, search_text, base_url):
         self.search_text = search_text
@@ -51,12 +51,14 @@ class LogDetails(db.Model):
         self.message = message
         self.status = status
 
+
 class SearchQueue(db.Model):
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, autoincrement=True)
     search_text: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="ONGOING")
     created_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), default=datetime.now)
-    
+
     def __init__(self, search_text):
         self.search_text = search_text

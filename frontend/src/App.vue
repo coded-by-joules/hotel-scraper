@@ -27,6 +27,12 @@ export default {
     "location-list": LocationList,
   },
   emits: ["onStartSearch"],
+  provide() {
+    return {
+      refreshLocation: (item) => this.reScrape(item),
+      deleteLocation: (item) => this.deleteItem(item),
+    };
+  },
   data() {
     return {
       searchLocations: [],
@@ -48,7 +54,6 @@ export default {
         return false;
       }
     },
-
     addSearch(item) {
       const existingItem = this.searchLocations.findIndex(
         (loc) => item === loc.location
@@ -69,7 +74,7 @@ export default {
           const itemIndex = getLocationById(locationList, newItem.id);
 
           if (response === false) {
-            locationList[itemIndex].status = "error";
+            locationList.status = "error";
           } else {
             const fetchedItem = response.data;
 
@@ -80,6 +85,54 @@ export default {
       } else {
         alert("Search key already exists.");
       }
+    },
+    reScrape(item) {
+      const locationList = this.searchLocations;
+      const locationIndex = getLocationById(locationList, item.id);
+
+      if (locationIndex >= 0) {
+        const locationItem = locationList[locationIndex];
+
+        locationItem.status = "ongoing";
+        this.startSraping(locationItem).then((response) => {
+          if (response === false) {
+            locationItem[itemIndex].status = "error_retain";
+          } else {
+            const fetchedItem = response.data;
+
+            locationItem.status = "loaded";
+            locationItem.count = fetchedItem["count"];
+          }
+        });
+      }
+    },
+    deleteItem(item) {
+      const locationList = this.searchLocations;
+      const locationIndex = getLocationById(locationList, item.id);
+      const locationItem = locationList[locationIndex];
+
+      locationItem.status = "deleting";
+      const commenceDelete = async (item) => {
+        try {
+          console.log(item.location);
+          const response = await axios.post(
+            "http://localhost:7000/api/delete-location",
+            { search_text: item.location }
+          );
+          return response;
+        } catch (err) {
+          console.log(err);
+          return false;
+        }
+      };
+
+      commenceDelete(locationItem).then((response) => {
+        if (response === false) {
+          locationItem.status = "error_delete";
+        } else {
+          if (response.status === 200) locationList.splice(locationIndex, 1);
+        }
+      });
     },
     loadLocations() {
       const getData = async () => {

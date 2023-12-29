@@ -8,7 +8,8 @@
       <a
         href="#"
         class="flex items-center justify-center hover:bg-blue-500 w-8"
-        v-if="location.status !== 'ongoing'"
+        v-if="location.status === 'loaded'"
+        @click="refreshLoc()"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -47,7 +48,8 @@
       <a
         href="#"
         class="flex items-center justify-center text-center hover:bg-red-800 w-8"
-        @click="changeStatus()"
+        @click="deleteItem()"
+        v-if="location.status === 'loaded'"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -69,12 +71,19 @@
 <script>
 export default {
   props: ["location"],
+  inject: ["refreshLocation", "deleteLocation"],
   computed: {
     hotelStatus() {
       if (this.location.status === "loaded") {
         return `${this.location.count} hotel(s)`;
       } else if (this.location.status === "error") {
         return "error occured while scraping this location";
+      } else if (this.location.status === "error_retain") {
+        return `${this.location.count} hotel(s) | an error occured while rescraping, no new hotels were added`;
+      } else if (this.location.status === "deleting") {
+        return "deleting...";
+      } else if (this.location.status === "error_delete") {
+        return `an error occured while deleting this item`;
       } else {
         return "scraping...";
       }
@@ -84,12 +93,18 @@ export default {
     setupClass() {
       return ["item", this.location.status];
     },
+    refreshLoc() {
+      this.refreshLocation(this.location);
+    },
     downloadData() {
       window.open(
         `http://localhost:7000/api/download-file?key=${encodeURIComponent(
           this.location.location
         )}`
       );
+    },
+    deleteItem() {
+      this.deleteLocation(this.location);
     },
   },
 };
@@ -107,7 +122,10 @@ export default {
   @apply bg-green-600;
 }
 
-.error {
+.error,
+.error_retain,
+.deleting,
+.error_delete {
   @apply bg-red-700;
 }
 </style>

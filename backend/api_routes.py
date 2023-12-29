@@ -200,3 +200,17 @@ def download_file():
             return send_file(output, as_attachment=True, download_name=f"{search_text}.xlsx", mimetype="application/vnd.ms-excel")
 
     return jsonify({"message": "An error occured during download"}), 500
+
+
+@api_routes.route('/delete-location', methods=['POST'])
+def delete_location():
+    search_text = request.json.get('search_text')
+    check_location = HotelSearchKeys.query.filter_by(
+        search_text=search_text).first()
+    if check_location:
+        db.session.delete(check_location)
+        db.session.commit()
+
+        return jsonify({"message": "Search key now deleted"}), 200
+    else:
+        return jsonify({"message": "An error occured while deleting this search item"}), 500
