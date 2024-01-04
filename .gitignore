@@ -15,6 +15,7 @@ dist-ssr
 __pycache__
 instance
 .frontend__old
+frontend_dist
 
 # Editor directories and files
 .vscode/*

@@ -10,7 +10,8 @@ import urllib.parse
 from hotel_link_generator import generate_paginated_hotels
 import sys
 
-settings_file = f"{os.path.abspath(__file__.replace('main.py', ''))}\settings.json"
+#settings_file = f"{os.path.abspath(__file__.replace('main.py', ''))}\settings.json"
+settings_file = "settings.json"
 browser_url = None
 
 with open(settings_file) as json_file:

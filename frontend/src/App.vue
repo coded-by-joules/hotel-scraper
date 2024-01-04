@@ -19,6 +19,7 @@ const getLocationById = (arr, id) => {
 
   return locationItem;
 };
+const host_url = import.meta.env.DEV ? "http://localhost:7000" : "";
 
 export default {
   components: {
@@ -42,7 +43,7 @@ export default {
     startSraping: async (item) => {
       try {
         const resp = await axios.post(
-          "http://localhost:7000/api/start-scraping",
+          `${host_url}/api/start-scraping`,
           {
             "search-text": item.location,
           }
@@ -116,7 +117,7 @@ export default {
         try {
           console.log(item.location);
           const response = await axios.post(
-            "http://localhost:7000/api/delete-location",
+            `${host_url}/api/delete-location`,
             { search_text: item.location }
           );
           return response;
@@ -138,7 +139,7 @@ export default {
       const getData = async () => {
         try {
           const resp = await axios.get(
-            "http://localhost:7000/api/get-locations"
+            `${host_url}/api/get-locations`
           );
           return resp;
         } catch (err) {
