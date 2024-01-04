@@ -12,7 +12,7 @@ Before everything else, make sure the latest versions of Python and NodeJS is in
 ### Backend
 1. Create a virtual environment, and activate it
 2. Run `pip install -r requirements.txt` to install backend dependencies
-3. Run `playwright browsers` to install browsers to be used for Playwright
+3. Run `playwright install` to install browsers to be used for Playwright
 4. Run `python app.py` to start running the backend
 
 ## Frontend
