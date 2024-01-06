@@ -102,7 +102,7 @@ export default {
         locationItem.status = "ongoing";
         this.startSraping(locationItem).then((response) => {
           if (response === false) {
-            locationItem[itemIndex].status = "error_retain";
+            locationItem.status = "error_retain";
           } else {
             const fetchedItem = response.data;
 

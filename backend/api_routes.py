@@ -5,6 +5,7 @@ from flask_sqlalchemy import SQLAlchemy
 import subprocess
 import pandas as pd
 from io import BytesIO
+from urllib.parse import urlparse
 
 api_routes = Blueprint("api", __name__)
 
@@ -137,10 +138,13 @@ def get_hotels():
 def start_scraping(search_text):
     new_task = SearchQueue(search_text)
 
+    o = urlparse(request.base_url)
+    current_host = f"{request.headers.get('Host')}"
+
     db.session.add(new_task)
     db.session.commit()
 
-    command = f"python ./backend/scraper/__init__.py {search_text}"
+    command = f"python ./backend/scraper/__init__.py {search_text} {current_host}"
     process = subprocess.Popen(command, shell=True)
     result = process.wait()
 
@@ -153,7 +157,7 @@ def scrape_precheck():
 
     check_status = SearchQueue.query.filter_by(search_text=search_text).order_by(
         SearchQueue.created_date.desc()).first()
-    if check_status is None or check_status.status == "FINISHED":
+    if check_status is None or (check_status.status != "ONGOING"):
         result = start_scraping(search_text)
 
         if result == 0:
@@ -164,10 +168,15 @@ def scrape_precheck():
             else:
                 return jsonify({"message": "There are no hotels for this search key", "count": 0}), 200
         else:
+            check_status = SearchQueue.query.filter_by(search_text=search_text).order_by(
+        SearchQueue.created_date.desc()).first()
+            
+            if check_status:
+                check_status.status = "ERROR"
+                db.session.commit()
             return jsonify({"message": "There's an error occured while searching the key. Please try it again"}), 500
     else:
         return jsonify({"message": "An existing scraping task is still ongoing. Please try again later"}), 500
-
 
 @api_routes.route('/end-scraping', methods=["POST"])
 def end_scraping():

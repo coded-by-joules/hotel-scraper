@@ -5,7 +5,6 @@ from page_scraper import scrape_list
 import json
 from selectolax.parser import HTMLParser
 import httpx
-import os
 import urllib.parse
 from hotel_link_generator import generate_paginated_hotels
 import sys
@@ -16,7 +15,6 @@ browser_url = None
 
 with open(settings_file) as json_file:
     settings = json.load(json_file)
-    api_url = settings['host']
     user_agent = settings['user_agent']
     proxies = None if settings['proxies'] == "" else settings['proxies']
     username = None if settings['username'] == "" else settings['username']
@@ -31,7 +29,7 @@ site_url = "https://www.tripadvisor.com/"
 search_url = "https://www.tripadvisor.com/Search?q="
 
 
-def post_results(data, update_type, message=None):
+def post_results(data, update_type, api_url, message=None):
     headers = {"Content-Type": "application/json"}
     data = {"data": data, "update_type": update_type}
     status = 0
@@ -50,11 +48,11 @@ def post_results(data, update_type, message=None):
                   headers=headers, json=log, verify=False)
 
 
-def postlog(message):
-    post_results(None, "post_log", message)
+def postlog(message, api_url):
+    post_results(None, "post_log", api_url, message)
 
 
-def end_scraping(search_text):
+def end_scraping(search_text, api_url):
     headers = {"Content-Type": "application/json"}
     data = {"search_text": search_text}
 
@@ -62,7 +60,7 @@ def end_scraping(search_text):
                   headers=headers, json=data, verify=False)
 
 
-def get_hotel_url(search_text):
+def get_hotel_url(search_text, api_url):
     if search_text in ["", None]:
         return None
 
@@ -113,7 +111,7 @@ async def getHotelUrls(client, full_link):
         return None
 
 
-async def start_scraping(search_text, hotel_link):
+async def start_scraping(search_text, hotel_link, api_url):
     decoded_search_text = urllib.parse.unquote_plus(search_text)
 
     print("Start deep-search")
@@ -147,12 +145,13 @@ async def start_scraping(search_text, hotel_link):
 
     # submit data to server
     post_results(
-        {"results": hotel_list, "search_text": decoded_search_text}, "send_hotel_list")
+        {"results": hotel_list, "search_text": decoded_search_text}, "send_hotel_list", api_url)
 
 
-async def main(search_text):
-    decoded_search_text = urllib.parse.unquote_plus(search_text)
-    full_link = get_hotel_url(decoded_search_text)
+async def main(search_text, current_host):
+    decoded_search_text = urllib.parse.unquote_plus(search_text)    
+    api_url = f"http://{current_host}/api"
+    full_link = get_hotel_url(decoded_search_text, api_url)
     exit_code = 0
     print(full_link)
 
@@ -178,41 +177,41 @@ async def main(search_text):
 
                 full_link = f"{site_url}{hotel_link}"
                 post_results({"search_text": decoded_search_text, "base_url": full_link},
-                             "send_hotel_link")
+                             "send_hotel_link", api_url)
 
                 await browser.close()
 
-        await start_scraping(search_text, full_link)
+        await start_scraping(search_text, full_link, api_url)
 
     except requests.exceptions.Timeout:
         message = f"Timeout error occured when searching \"{decoded_search_text}\""
         print(message)
-        postlog(message)
+        postlog(message, api_url)
         exit_code = 1
     except httpx.RequestError:
         print(message)
         message = f"There was an error occured during hotel search requests for \"{decoded_search_text}\""
-        postlog(message)
+        postlog(message, api_url)
         exit_code = 1
     except PWTimeoutError:
         await browser.close()
         message = f"Timeout error occured when searching \"{decoded_search_text}\""
         print(message)
-        postlog(message)
+        postlog(message, api_url)
         exit_code = 1
     except ValueError as err:
         message = f"An error occured when searching \"{decoded_search_text}\": {err.args[0]}"
         print(message)
-        postlog(message)
+        postlog(message, api_url)
         exit_code = 1
     except Exception as e:
         message = f"An unknown error has occured when searching \"{decoded_search_text}\""
         print(message)
         print(e)
-        postlog(message)
+        postlog(message, api_url)
         exit_code = 1
     finally:
-        end_scraping(search_text)
+        end_scraping(search_text, api_url)
         sys.exit(exit_code)
 
 
