@@ -8,7 +8,7 @@
       <a
         href="#"
         class="flex items-center justify-center hover:bg-blue-500 w-8"
-        v-if="location.status === 'loaded'"
+        v-if="location.status === 'loaded' || location.status === 'error' || location.status === 'error_retain'"
         @click="refreshLoc()"
       >
         <svg
@@ -71,7 +71,7 @@
 <script>
 export default {
   props: ["location"],
-  inject: ["refreshLocation", "deleteLocation"],
+  inject: ["refreshLocation", "deleteLocation", "host_url"],
   computed: {
     hotelStatus() {
       if (this.location.status === "loaded") {
@@ -98,7 +98,7 @@ export default {
     },
     downloadData() {
       window.open(
-        `http://localhost:7000/api/download-file?key=${encodeURIComponent(
+        `${this.host_url()}/api/download-file?key=${encodeURIComponent(
           this.location.location
         )}`
       );

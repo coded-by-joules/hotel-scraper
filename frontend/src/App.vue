@@ -32,6 +32,7 @@ export default {
     return {
       refreshLocation: (item) => this.reScrape(item),
       deleteLocation: (item) => this.deleteItem(item),
+      host_url: () => host_url,
     };
   },
   data() {
@@ -75,12 +76,16 @@ export default {
           const itemIndex = getLocationById(locationList, newItem.id);
 
           if (response === false) {
-            locationList.status = "error";
+            locationList[itemIndex].status = "error";
           } else {
-            const fetchedItem = response.data;
+            if (response.status === 200) {
+              const fetchedItem = response.data;
 
-            locationList[itemIndex].status = "loaded";
-            locationList[itemIndex].count = fetchedItem["count"];
+              locationList[itemIndex].status = "loaded";
+              locationList[itemIndex].count = fetchedItem["count"];
+            } else {
+
+            }
           }
         });
       } else {
