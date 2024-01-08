@@ -1,0 +1,17 @@
+FROM python:latest
+
+WORKDIR /app
+COPY backend/. /app/backend
+COPY frontend_dist/. /app/frontend_dist
+COPY requirements.txt /app/
+COPY app.py /app/
+COPY settings.json /app/
+
+RUN pip install -r requirements.txt
+
+ENV CONFIG_MODE staging
+ENV STAGING_DATABASE_URL sqlite:///hotels.db
+RUN flask db init
+
+EXPOSE 7000
+CMD ["gunicorn", "-b", ":7000", "app:app"]

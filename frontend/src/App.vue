@@ -19,7 +19,7 @@ const getLocationById = (arr, id) => {
 
   return locationItem;
 };
-const host_url = import.meta.env.DEV ? "http://localhost:7000" : "";
+const host_url = import.meta.env.DEV ? "http://localhost:5000" : "";
 
 export default {
   components: {

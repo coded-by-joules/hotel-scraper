@@ -1,9 +1,10 @@
-from . import db
+from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Integer, String, DateTime, Boolean, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 from typing import List
 
+db = SQLAlchemy()
 
 class HotelSearchKeys(db.Model):
     id: Mapped[int] = mapped_column(

@@ -4,6 +4,7 @@
       <input
         type="text"
         id="searchBox"
+        autocomplete="off"
         class="border-gray-700 border-solid border-b-2 p-2 rounded w-3/4 outline-none text-white bg-transparent"
         name="Search"
         placeholder="Enter a location"

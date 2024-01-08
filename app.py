@@ -1,21 +1,20 @@
-from flask import render_template, url_for
-from backend import app, db
-from backend.database import *
-from backend.api_routes import api_routes
+from flask import render_template
+from backend import create_app
+from backend.database import db
+import os
 
+config_mode = os.getenv("CONFIG_MODE")
 
-app.register_blueprint(api_routes, url_prefix="/api")
-
+app = create_app(config_mode)
 
 @app.route("/")
 def hello():
-    if app.debug:
+    if config_mode in ["development", "testing"]:
         return "Hello world"
     else:
         return render_template("index.html")
 
-
 if (__name__ == "__main__"):
     with app.app_context():
         db.create_all()
-    app.run(host='localhost', port=7000, debug=True)
+    app.run()

@@ -1,4 +1,3 @@
-from . import db
 from . database import *
 from flask import Blueprint, jsonify, request, send_file
 from flask_sqlalchemy import SQLAlchemy
