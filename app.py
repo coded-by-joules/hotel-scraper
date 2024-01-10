@@ -4,8 +4,8 @@ from backend.database import db
 import os
 
 config_mode = os.getenv("CONFIG_MODE")
-
 app = create_app(config_mode)
+celery_app = app.extensions["celery"]
 
 @app.route("/")
 def hello():

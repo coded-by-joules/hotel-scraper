@@ -9,9 +9,13 @@ COPY settings.json /app/
 
 RUN pip install -r requirements.txt
 
-ENV CONFIG_MODE staging
-ENV STAGING_DATABASE_URL sqlite:///hotels.db
+ENV CONFIG_MODE testing
+ENV TEST_DATABASE_URL sqlite:///hotels.db
+ENV FLASK_APP app
+
 RUN flask db init
+RUN flask db migrate
+RUN flask db upgrade
 
 EXPOSE 7000
 CMD ["gunicorn", "-b", ":7000", "app:app"]

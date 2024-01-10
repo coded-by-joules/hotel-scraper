@@ -1,10 +1,11 @@
 from . database import *
 from flask import Blueprint, jsonify, request, send_file
-from flask_sqlalchemy import SQLAlchemy
 import subprocess
 import pandas as pd
 from io import BytesIO
 from urllib.parse import urlparse
+from . scraper_tasks import get_hotel_link
+from celery.result import AsyncResult
 
 api_routes = Blueprint("api", __name__)
 
@@ -222,3 +223,20 @@ def delete_location():
         return jsonify({"message": "Search key now deleted"}), 200
     else:
         return jsonify({"message": "An error occured while deleting this search item"}), 500
+
+@api_routes.route('/get-location', methods=['GET'])
+def get_location():
+    search_text = request.json.get('search_text')
+    result = get_hotel_link.apply_async(search_text, retry=True, retry_policy={
+        "max_retries": 1
+    })
+    return result.id
+
+@api_routes.route('/result/<id>')
+def task_result(id: str) -> dict[str, object]:
+    result = AsyncResult(id)
+    return {
+        "ready": result.ready(),
+        "successful": result.successful(),
+        "value": result.result if result.ready() else None,
+    }

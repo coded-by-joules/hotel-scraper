@@ -7,10 +7,12 @@ class DevelopmentConfig(Config):
     DEVELOPMENT = True
     DEBUG = True
     SQLALCHEMY_DATABASE_URI = os.getenv("DEVELOPMENT_DATABASE_URL")
+    REDIS_URL = os.getenv("redis://redis")
 
 class TestingConfig(Config):
     TESTING = False
     SQLALCHEMY_DATABASE_URI = os.getenv("TEST_DATABASE_URL")
+    REDIS_URL = os.getenv("redis://redis")
 
 class StagingConfig(Config):
     DEVELOPMENT = True
