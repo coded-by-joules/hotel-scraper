@@ -12,8 +12,8 @@ def create_app(config_mode):
     app.config.from_object(config[config_mode])
     app.config.from_mapping(
         CELERY=dict(
-            broker_url=os.getenv("REDIS_URL"),
-            result_backend=os.getenv("REDIS_URL"),
+            broker_url=app.config['REDIS_URL'],
+            result_backend=app.config['REDIS_URL'],
             task_ignore_result=True
         ),
     )

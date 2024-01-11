@@ -16,6 +16,7 @@ __pycache__
 instance
 .frontend__old
 frontend_dist
+migrations
 
 # Editor directories and files
 .vscode/*
@@ -27,3 +28,4 @@ frontend_dist
 *.njsproj
 *.sln
 *.sw?
+*.rdb

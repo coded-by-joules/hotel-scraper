@@ -34,7 +34,7 @@ def getHotelListPage(page, context, search_text):
         "div[data-test-target='nav-links'] a").filter(has_text="Hotels")
     return hotel_link.get_attribute("href")
 
-@shared_task(bind=True,ignore_result=False)
+@shared_task(bind=True,ignore_result=False, max_retries=1)
 def get_hotel_link(self,search_text):
     try:
         decoded_search_text = urllib.parse.unquote_plus(search_text)
@@ -46,6 +46,7 @@ def get_hotel_link(self,search_text):
                 browser = pw.chromium.launch(slow_mo=100)
             context = browser.new_context(user_agent=user_agent)
             page = context.new_page()
+            print("Connecting to website")
             page.goto(f"{search_url}{search_text}", timeout=120000)
             page.wait_for_load_state()
 

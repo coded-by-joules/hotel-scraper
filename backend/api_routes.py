@@ -226,10 +226,8 @@ def delete_location():
 
 @api_routes.route('/get-location', methods=['GET'])
 def get_location():
-    search_text = request.json.get('search_text')
-    result = get_hotel_link.apply_async(search_text, retry=True, retry_policy={
-        "max_retries": 1
-    })
+    search_text = request.args.get('key')
+    result = get_hotel_link.apply_async((search_text,), retry=True)
     return result.id
 
 @api_routes.route('/result/<id>')
