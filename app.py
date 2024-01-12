@@ -2,6 +2,9 @@ from flask import render_template
 from backend import create_app
 from backend.database import db
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 config_mode = os.getenv("CONFIG_MODE")
 app = create_app(config_mode)

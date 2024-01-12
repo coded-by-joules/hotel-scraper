@@ -4,7 +4,7 @@ import subprocess
 import pandas as pd
 from io import BytesIO
 from urllib.parse import urlparse
-from . scraper_tasks import get_hotel_link
+from . scraper_tasks import start_scraping_async
 from celery.result import AsyncResult
 
 api_routes = Blueprint("api", __name__)
@@ -227,14 +227,15 @@ def delete_location():
 @api_routes.route('/get-location', methods=['GET'])
 def get_location():
     search_text = request.args.get('key')
-    result = get_hotel_link.apply_async((search_text,), retry=True)
-    return result.id
+    result = start_scraping_async(search_text)
+    return result
 
 @api_routes.route('/result/<id>')
 def task_result(id: str) -> dict[str, object]:
     result = AsyncResult(id)
+    print(result)
     return {
         "ready": result.ready(),
-        "successful": result.successful(),
+        "state": result.status,
         "value": result.result if result.ready() else None,
     }
