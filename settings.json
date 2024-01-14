@@ -2,8 +2,8 @@
   "host": "http://localhost:7000/api",
   "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   "proxies": "",
-  "wss_host": "brd.superproxy.io:9222",
-  "username": "brd-customer-hl_200dfb94-zone-scraping_browser1",
-  "password": "o7am3usi4b30",
+  "wss_host": "",
+  "username": "",
+  "password": "",
   "depth_level": 50
 }

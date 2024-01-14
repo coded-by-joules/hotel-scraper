@@ -236,6 +236,6 @@ def task_result(id: str) -> dict[str, object]:
     print(result)
     return {
         "ready": result.ready(),
-        "state": result.status,
+        "state": result.state,
         "value": result.result if result.ready() else None,
     }

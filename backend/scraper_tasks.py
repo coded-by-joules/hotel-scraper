@@ -1,4 +1,4 @@
-from playwright.sync_api import sync_playwright, TimeoutError as PWTimeoutError
+from playwright.sync_api import sync_playwright, Error, TimeoutError
 from celery import shared_task, states
 import json
 import urllib
@@ -31,7 +31,7 @@ with open(settings_file) as json_file:
 #
 def start_scraping_async(search_text):
     chain = (check_db_for_link.s(search_text) | 
-             get_hotel_link.s()
+             get_hotel_link.s().set(retry=True)
              ).apply_async()
     return chain.id
 
@@ -69,33 +69,46 @@ def get_hotel_link(self,params):
     if hotel_link is not None:
         return hotel_link
     else:
-        try:
-            decoded_search_text = urllib.parse.unquote_plus(search_text)
-            with sync_playwright() as pw:
-                logger.info("Connecting to browser")
-                if browser_url:
-                    browser = pw.chromium.connect_over_cdp(browser_url)
-                else:
-                    browser = pw.chromium.launch(slow_mo=100)
-                context = browser.new_context(user_agent=user_agent)
-                page = context.new_page()
-                logger.info("Connecting to website")
-                page.goto(f"{search_url}{search_text}", timeout=120000)
-                page.wait_for_load_state()
+        decoded_search_text = urllib.parse.unquote_plus(search_text)
+        with sync_playwright() as pw:
+            try:
+                try:
+                    if browser_url:
+                        browser = pw.chromium.connect_over_cdp(browser_url)
+                    else:
+                        browser = pw.chromium.launch(slow_mo=100)
+                    context = browser.new_context(user_agent=user_agent)
+                    page = context.new_page()
+                    logger.info("Connecting to website")
+                    page.goto(f"{search_url}{search_text}")
+                    page.wait_for_load_state()
 
-                final_link = getHotelListPage(page, context, search_text)
-                browser.close()
-                if final_link in ["",None]:
-                    raise ValueError(
-                            f"Hotel link is unavailable. Please try again when searching \"{decoded_search_text}\"")
-                else:
-                    return final_link
-        except PWTimeoutError as err:
-            logger.exception(err)
-            browser.close()
-            raise self.retry(exc=err, countdown=5) from None
-        except ValueError as err:
-            logger.exception(err)
-            browser.close()
-            raise self.retry(exc=err, countdown=5) from None            
-
+                    final_link = getHotelListPage(page, context, search_text)
+                    if final_link in ["",None]:
+                        raise ValueError(
+                                f"Hotel link is unavailable. Please try again when searching \"{decoded_search_text}\"")
+                    else:
+                        return final_link
+                except (Error, TimeoutError, Exception) as ex:
+                    logger.error(ex)
+                    raise self.retry(max_retries=1, countdown=5)
+                finally:
+                    if page:
+                        page.close()
+                    if browser:
+                        browser.close()
+            except (MaxRetriesExceededError) as mr:
+                logger.error("Retries exceeded")
+                self.update_state(
+                    state=states.FAILURE,
+                    meta={
+                        'exc_type': type(mr).__name__,
+                        'exc_message': traceback.format_exc().split('\n'),
+                        'custom': '...'
+                    })
+                raise Ignore()
+            finally:
+                if page:
+                    page.close()
+                if browser:
+                    browser.close()
