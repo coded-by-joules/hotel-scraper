@@ -233,9 +233,8 @@ def get_location():
 @api_routes.route('/result/<id>')
 def task_result(id: str) -> dict[str, object]:
     result = AsyncResult(id)
-    print(result)
     return {
         "ready": result.ready(),
         "state": result.state,
-        "value": result.result if result.ready() else None,
+        "result": result.result if result.successful() else None,
     }
