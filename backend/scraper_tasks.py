@@ -4,11 +4,12 @@ from celery.result import AsyncResult
 import json
 import urllib
 import logging
-from .database import db, HotelSearchKeys
+from .database import db, HotelSearchKeys, HotelInfo
 from celery.exceptions import MaxRetriesExceededError, Ignore
 import traceback
 import re
 import httpx
+from selectolax.parser import HTMLParser
 
 site_url = "https://www.tripadvisor.com/"
 search_url = "https://www.tripadvisor.com/Search?q="
@@ -32,13 +33,23 @@ with open(settings_file) as json_file:
 #
 # UTILITY FUNCTIONS
 #
+def nodes(node):
+    while node.parent:
+        yield node
+        node = node.parent
+    yield node            
+
 def start_scraping_async(search_text):
     chain = (check_db_for_link.s(search_text) | 
              get_hotel_link.s().set(retry=True) |
              save_hotel_link.s() |
-             generate_paginated_hotels.s()
-             ).apply_async()
-    return chain.id
+             generate_paginated_hotels.s() |
+             start_scraping.s() |
+             start_scraping_hotels.s() |
+             save_hotels_to_db.s()).apply_async()
+    
+    task_collection = [node.id for node in reversed(list(nodes(chain)))]
+    return task_collection
 
 def getHotelListPage(page, context, search_text):
     print(f"Searching for {search_text} on {page.url}")
@@ -57,7 +68,7 @@ def getHotelListPage(page, context, search_text):
 # CELERY TASKS
 #
 @shared_task(name='check database for link')
-def check_db_for_link(search_text):
+def check_db_for_link(search_text,ignore_result=False):
     key_item = HotelSearchKeys.query.filter_by(
         search_text=search_text).first()
     if key_item:
@@ -119,7 +130,7 @@ def get_hotel_link(self,params):
                 if browser:
                     browser.close()
 
-@shared_task(name='save hotel link', bind=True)
+@shared_task(name='save hotel link', bind=True,ignore_result=False)
 def save_hotel_link(self, hotel_data):
     hotel_link = hotel_data["link"]
     task = AsyncResult(hotel_data["task_id"])
@@ -137,14 +148,17 @@ def save_hotel_link(self, hotel_data):
         else:
             logger.info("Link already exists")
     
-        return f"{site_url}{hotel_link}"
+        return {"search_text": search_text, "url": f"{site_url}{hotel_link}"}
     else:
-        self.update_state(state=states.IGNORED, meta={"custom": "Hotel link fetch was failed"})
+        self.update_state(state=states.FAILURE, meta={"custom": "Hotel link fetch was failed"})
         logger.error("Hotel link search was failed")
         raise Ignore()
     
 @shared_task(name='generate paginated hotels', bind=True, ignore_result=False)
-def generate_paginated_hotels(self,hotel_link):    
+def generate_paginated_hotels(self,data):
+    hotel_link = data["url"]
+    search_text = data["search_text"]
+
     extracted_url = hotel_link.split("//")[2]
     hotel_urls = [hotel_link]
     validated_links = []
@@ -167,7 +181,7 @@ def generate_paginated_hotels(self,hotel_link):
         if link is not None:
             hotel_urls.append(link)
 
-    return hotel_urls    
+    return {"search_text": search_text, "urls": hotel_urls}
 
 
 @shared_task(name='validate link', ignore_result=False)
@@ -178,5 +192,130 @@ def validate_link(link):
             return link
         else:
             return None
-    except httpx.TimeoutException:
+    except (httpx.TimeoutException, httpx.ConnectError, Exception):
         return None
+    
+@shared_task(name='start scraping', bind=True, ignore_result=False)
+def start_scraping(self, data):
+    search_text = data["search_text"]
+    hotel_links = data["urls"]
+
+    if len(hotel_links) > 0:
+        tasks = []
+        for url in hotel_links:
+            tasks.append(get_hotel_urls.s(url))
+        
+        logger.info("Getting hotel URLs")
+        job = group(tasks).apply_async()
+        extracted_hotel_urls = job.get(disable_sync_subtasks=False)
+
+        hotel_urls = []
+        for hotel_url in extracted_hotel_urls:
+            if hotel_url is not None:
+                hotel_urls.append(hotel_url) 
+
+        logger.info("Flattening the List")
+        final_hotel_urls = [x for xs in hotel_urls for x in xs]
+
+        return {"search_text": search_text, "urls": final_hotel_urls}
+    else:
+        self.update_state(state=states.FAILURE, meta={"custom": "No link to scrape"})
+        logger.error("No link to scrape")
+        raise Ignore()
+    
+@shared_task(name='get hotel urls', ignore_result=False)
+def get_hotel_urls(hotel_page_link):
+    try:
+        resp = httpx.get(hotel_page_link, headers={"User-Agent": user_agent}, proxies=proxies, verify=False)
+        if resp.status_code == 200:
+            page = HTMLParser(resp.text)
+            titles = page.css("div[data-automation='hotel-card-title']")
+
+            hotel_urls = []
+            for title in titles:
+                url = title.css_first("a").attributes["href"]
+                hotel_urls.append(f"{site_url}{url}")
+            
+            return hotel_urls
+        else:
+            return None
+    except (httpx.TimeoutException, httpx.ConnectError, Exception):
+        return None
+    
+@shared_task(name="start scraping hotel", bind=True, ignore_result=False)
+def start_scraping_hotels(self, data):
+    search_text = data["search_text"]
+    hotel_list = data["urls"]
+    if len(hotel_list) > 0:
+        tasks = []
+        for url in hotel_list:
+            tasks.append(scrape_page.s(url))
+        
+        logger.info("Scraping details in the URLs")
+        job = group(tasks).apply_async()
+        results = job.get(disable_sync_subtasks=False)
+
+        hotel_data = []
+        for result in results:
+            if result is not None:
+                hotel_data.append(result) 
+        
+        return {"search_text": search_text, "data": hotel_data}
+    else:
+        self.update_state(state=states.FAILURE, meta={"custom": "No link to scrape"})
+        logger.error("No link to scrape")
+        raise Ignore()
+    
+@shared_task(name="scrape hotel page", ignore_result=False)
+def scrape_page(url):
+    try:
+        resp = httpx.get(url, headers={"User-Agent": user_agent}, proxies=proxies, verify=False)
+        if resp.status_code == 200:
+            page = HTMLParser(resp.text)
+            hotel_element = page.css_first("h1#HEADING")
+            address_element = None
+            if hotel_element:
+                address_element = hotel_element.parent.parent.next.child.child.next
+            phone_element = page.css_first("div[data-blcontact='PHONE ']")
+
+            if hotel_element is None:
+                return None
+            return {"name": hotel_element.text() if hotel_element else None,
+                    "phone": phone_element.text() if phone_element else None,
+                    "address": address_element.text() if address_element else None,
+                    "url": url}
+        else:
+            return None
+    except (httpx.TimeoutException, httpx.ConnectError, Exception):
+        return None
+    
+@shared_task(name="save to database", bind=True,ignore_result=False)
+def save_hotels_to_db(self, data):
+    search_text = data["search_text"]
+    hotel_data = data["data"]
+
+    if len(hotel_data) > 0:
+        logger.info("Saving hotel data to database")
+        searchKeyItem = HotelSearchKeys.query.filter_by(
+            search_text=search_text).first()
+        for result in hotel_data:
+            if result:
+                hotel = HotelInfo.query.filter_by(
+                    hotel_name=result['name'], search_key=searchKeyItem.id).first()
+                if hotel is None:
+                    hotel = HotelInfo(search_id=searchKeyItem.id,
+                                        hotel_name=result['name'],
+                                        address=result['address'],
+                                        phone=result['phone'],
+                                        url=result['url'])
+                    db.session.add(hotel)
+                    searchKeyItem.children.append(hotel)
+                else:
+                    hotel.address = result['address']
+                    hotel.phone = result['phone']
+        db.session.commit()
+        
+        return "Saving to data, complete"
+    else:
+        self.update_state(state=states.FAILURE, meta={"custom": "No hotel data found"})
+        raise Ignore()

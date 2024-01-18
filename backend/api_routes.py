@@ -238,3 +238,7 @@ def task_result(id: str) -> dict[str, object]:
         "state": result.state,
         "result": result.result if result.successful() else None,
     }
+
+@api_routes.route('/inspect/<id>')
+def inspect_task(id: str):
+    tasks = AsyncResult(id)
