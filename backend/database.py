@@ -56,10 +56,15 @@ class LogDetails(db.Model):
 class SearchQueue(db.Model):
     id: Mapped[int] = mapped_column(
         Integer, primary_key=True, autoincrement=True)
+    queue_id: Mapped[str] = mapped_column(String(10), nullable=False, unique=True)
     search_text: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="ONGOING")
     created_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), default=datetime.now)
+    tasks: Mapped[str] = mapped_column(String(255), nullable=False)
 
-    def __init__(self, search_text):
+    def __init__(self, queue_id, search_text, tasks):
+        self.queue_id = queue_id
         self.search_text = search_text
+        self.tasks = tasks
+

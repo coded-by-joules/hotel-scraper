@@ -2,6 +2,7 @@ import os
 
 class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = True
+    SECRET_KEY = "something_key_here"
 
 class DevelopmentConfig(Config):
     DEVELOPMENT = True

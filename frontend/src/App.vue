@@ -12,6 +12,7 @@
 import TheHeader from "./components/TheHeader.vue";
 import SearchBox from "./components/SearchBox.vue";
 import LocationList from "./components/LocationItems/LocationList.vue";
+import { state } from "./socket";
 import axios from "axios";
 
 const getLocationById = (arr, id) => {
@@ -39,6 +40,11 @@ export default {
     return {
       searchLocations: [],
     };
+  },
+  computed: {
+    connected_io() {
+      return state.connected;
+    }
   },
   methods: {
     startSraping: async (item) => {
@@ -68,6 +74,7 @@ export default {
           location: item,
           count: "0",
           id: id,
+          queue_id: null,
         };
         const locationList = this.searchLocations;
         locationList.push(newItem);
@@ -82,7 +89,7 @@ export default {
               const fetchedItem = response.data;
 
               locationList[itemIndex].status = "loaded";
-              locationList[itemIndex].count = fetchedItem["count"];
+              locationList[itemIndex]["queue_id"] = fetchedItem["queue_id"];
             } else {
 
             }
@@ -165,6 +172,7 @@ export default {
                 location: search_key,
                 count: count,
                 status: "loaded",
+                queue_id: null
               });
             });
           }
@@ -174,6 +182,7 @@ export default {
   },
   created() {
     this.loadLocations();
+    console.log(this.connected_io);
   },
 };
 </script>

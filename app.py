@@ -3,6 +3,7 @@ from backend import create_app
 from backend.database import db
 import os
 from dotenv import load_dotenv
+from backend.socket_config import socket_io
 
 load_dotenv()
 
@@ -20,4 +21,4 @@ def hello():
 if (__name__ == "__main__"):
     with app.app_context():
         db.create_all()
-    app.run()
+    socket_io.run(app)

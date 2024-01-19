@@ -5,6 +5,7 @@ from .database import db
 from .api_routes import api_routes
 from .config import config
 from flask_migrate import Migrate
+from .socket_config import socket_io
 import os
 
 def create_app(config_mode):
@@ -22,8 +23,9 @@ def create_app(config_mode):
     migrate = Migrate()
 
     db.init_app(app)
-    migrate.init_app(app, db)   
+    migrate.init_app(app, db)
+    socket_io.init_app(app,cors_allowed_origins="*")
     app.register_blueprint(api_routes, url_prefix="/api")
-
     celery_init_app(app)
+
     return app

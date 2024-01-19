@@ -1,85 +1,97 @@
 from . database import *
 from flask import Blueprint, jsonify, request, send_file
-import subprocess
 import pandas as pd
 from io import BytesIO
 from urllib.parse import urlparse
 from . scraper_tasks import start_scraping_async
 from celery.result import AsyncResult
+import random
+from string import ascii_uppercase
 
 api_routes = Blueprint("api", __name__)
 
 
-@api_routes.route('/search')
-def get_search_url():
-    search_key = request.args.get('key')
-    if search_key:
-        key_item = HotelSearchKeys.query.filter_by(
-            search_text=search_key).first()
-        if key_item:
-            return jsonify({"url": key_item.base_url}), 200
+# @api_routes.route('/search')
+# def get_search_url():
+#     search_key = request.args.get('key')
+#     if search_key:
+#         key_item = HotelSearchKeys.query.filter_by(
+#             search_text=search_key).first()
+#         if key_item:
+#             return jsonify({"url": key_item.base_url}), 200
 
-    return jsonify({"url": None}), 404
+#     return jsonify({"url": None}), 404
 
 
-@api_routes.route('/post-results', methods=['POST'])
-def post_results():
-    update_type = request.json.get('update_type')
+# @api_routes.route('/post-results', methods=['POST'])
+# def post_results():
+#     update_type = request.json.get('update_type')
 
-    try:
-        result_message = "Success"
-        if update_type == "send_hotel_link":
-            data = request.json.get('data')
-            search_text = data['search_text']
+#     try:
+#         result_message = "Success"
+#         if update_type == "send_hotel_link":
+#             data = request.json.get('data')
+#             search_text = data['search_text']
 
-            exists = db.session.query(HotelSearchKeys.id).filter_by(
-                base_url=data['base_url']).first() is not None
-            if not exists:
-                search_item = HotelSearchKeys(
-                    search_text, data['base_url'])
-                db.session.add(search_item)
-                db.session.commit()
-                result_message = f"Successfully added {search_text} to database"
-            else:
-                result_message = f"{search_text} already in database"
+#             exists = db.session.query(HotelSearchKeys.id).filter_by(
+#                 base_url=data['base_url']).first() is not None
+#             if not exists:
+#                 search_item = HotelSearchKeys(
+#                     search_text, data['base_url'])
+#                 db.session.add(search_item)
+#                 db.session.commit()
+#                 result_message = f"Successfully added {search_text} to database"
+#             else:
+#                 result_message = f"{search_text} already in database"
 
-        if update_type == "send_hotel_list":
-            data = request.json.get('data')
-            search_text = data['search_text']
+#         if update_type == "send_hotel_list":
+#             data = request.json.get('data')
+#             search_text = data['search_text']
 
-            searchKeyItem = HotelSearchKeys.query.filter_by(
-                search_text=search_text).first()
-            for result in data['results']:
-                if result:
-                    hotel = HotelInfo.query.filter_by(
-                        hotel_name=result['name'], search_key=searchKeyItem.id).first()
-                    if hotel is None:
-                        hotel = HotelInfo(search_id=searchKeyItem.id,
-                                          hotel_name=result['name'],
-                                          address=result['address'],
-                                          phone=result['phone'],
-                                          url=result['url'])
-                        db.session.add(hotel)
-                        searchKeyItem.children.append(hotel)
-                    else:
-                        hotel.address = result['address']
-                        hotel.phone = result['phone']
-            db.session.commit()
-            result_message = f"Hotels for {search_text} now added in database"
+#             searchKeyItem = HotelSearchKeys.query.filter_by(
+#                 search_text=search_text).first()
+#             for result in data['results']:
+#                 if result:
+#                     hotel = HotelInfo.query.filter_by(
+#                         hotel_name=result['name'], search_key=searchKeyItem.id).first()
+#                     if hotel is None:
+#                         hotel = HotelInfo(search_id=searchKeyItem.id,
+#                                           hotel_name=result['name'],
+#                                           address=result['address'],
+#                                           phone=result['phone'],
+#                                           url=result['url'])
+#                         db.session.add(hotel)
+#                         searchKeyItem.children.append(hotel)
+#                     else:
+#                         hotel.address = result['address']
+#                         hotel.phone = result['phone']
+#             db.session.commit()
+#             result_message = f"Hotels for {search_text} now added in database"
 
-        if update_type == "post_log":
-            message = request.json.get('message')
-            status = request.json.get('status')
+#         if update_type == "post_log":
+#             message = request.json.get('message')
+#             status = request.json.get('status')
 
-            log_item = LogDetails(message, status)
-            db.session.add(log_item)
-            db.session.commit()
+#             log_item = LogDetails(message, status)
+#             db.session.add(log_item)
+#             db.session.commit()
 
-        return jsonify({"message": result_message}), 200
-    except Exception as err:
-        print(err)
-        return jsonify({"message": err.args[0]}), 500
+#         return jsonify({"message": result_message}), 200
+#     except Exception as err:
+#         print(err)
+#         return jsonify({"message": err.args[0]}), 500
 
+def generate_unique_code(length):
+    while True:
+        code = ""
+        for _ in range(length):
+            code += random.choice(ascii_uppercase)
+
+        code_exist = SearchQueue.query.filter_by(queue_id=code).first()
+        if not code_exist:
+            break
+
+    return code
 
 @api_routes.route("/get-locations")
 def get_locations():
@@ -135,20 +147,20 @@ def get_hotels():
     return jsonify({"message": "No hotels found"}), 404
 
 
-def start_scraping(search_text):
-    new_task = SearchQueue(search_text)
+# def start_scraping(search_text):
+#     new_task = SearchQueue(search_text)
 
-    o = urlparse(request.base_url)
-    current_host = f"{request.headers.get('Host')}"
+#     o = urlparse(request.base_url)
+#     current_host = f"{request.headers.get('Host')}"
 
-    db.session.add(new_task)
-    db.session.commit()
+#     db.session.add(new_task)
+#     db.session.commit()
 
-    command = f"python ./backend/scraper/__init__.py {search_text} {current_host}"
-    process = subprocess.Popen(command, shell=True)
-    result = process.wait()
+#     command = f"python ./backend/scraper/__init__.py {search_text} {current_host}"
+#     process = subprocess.Popen(command, shell=True)
+#     result = process.wait()
 
-    return result
+#     return result
 
 
 @api_routes.route('/start-scraping', methods=["POST"])
@@ -157,30 +169,26 @@ def scrape_precheck():
 
     check_status = SearchQueue.query.filter_by(search_text=search_text).order_by(
         SearchQueue.created_date.desc()).first()
-    if check_status is None or (check_status.status != "ONGOING"):
-        result = start_scraping(search_text)
+    if check_status is None or (check_status.status != "ONGOING"):        
+        result = start_scraping_async(search_text)
 
-        if result == 0:
-            hotel_list = getHotels(search_text, "all")
+        if len(result) > 0:
+            # save tasks to database
+            code = generate_unique_code(6)
+            search_item = SearchQueue(queue_id=code,
+                                      search_text=search_text,
+                                    tasks=",".join(result))
+            db.session.add(search_item)
+            db.session.commit()
 
-            if hotel_list:
-                return jsonify({"message": "Scraping successfull", "count": len(hotel_list['hotels'])}), 200
-            else:
-                return jsonify({"message": "There are no hotels for this search key", "count": 0}), 200
+            return jsonify({"message": "Scraping now started", "queue_id": code}), 200
         else:
-            check_status = SearchQueue.query.filter_by(search_text=search_text).order_by(
-        SearchQueue.created_date.desc()).first()
-            
-            if check_status:
-                check_status.status = "ERROR"
-                db.session.commit()
-            return jsonify({"message": "There's an error occured while searching the key. Please try it again"}), 500
+            return jsonify({"message": "An error occured. Please try again later"}), 500
     else:
         return jsonify({"message": "An existing scraping task is still ongoing. Please try again later"}), 500
 
-@api_routes.route('/end-scraping', methods=["POST"])
-def end_scraping():
-    search_text = request.json.get('search_text')
+
+def end_scraping(search_text):
     check_status = SearchQueue.query.filter_by(search_text=search_text).order_by(
         SearchQueue.created_date.desc()).first()
 
@@ -224,9 +232,7 @@ def delete_location():
     else:
         return jsonify({"message": "An error occured while deleting this search item"}), 500
 
-@api_routes.route('/get-location', methods=['GET'])
-def get_location():
-    search_text = request.args.get('key')
+def get_location(search_text):
     result = start_scraping_async(search_text)
     return result
 
@@ -238,7 +244,3 @@ def task_result(id: str) -> dict[str, object]:
         "state": result.state,
         "result": result.result if result.successful() else None,
     }
-
-@api_routes.route('/inspect/<id>')
-def inspect_task(id: str):
-    tasks = AsyncResult(id)
