@@ -39,20 +39,6 @@ class HotelInfo(db.Model):
         self.address = address
         self.phone = phone
 
-
-class LogDetails(db.Model):
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True)
-    message: Mapped[str] = mapped_column(String(500))
-    status: Mapped[str] = mapped_column(String(50))
-    created_date: Mapped[datetime] = mapped_column(
-        DateTime(timezone=False), default=datetime.now)
-
-    def __init__(self, message, status):
-        self.message = message
-        self.status = status
-
-
 class SearchQueue(db.Model):
     id: Mapped[int] = mapped_column(
         Integer, primary_key=True, autoincrement=True)
@@ -61,7 +47,7 @@ class SearchQueue(db.Model):
     status: Mapped[str] = mapped_column(String(50), default="ONGOING")
     created_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), default=datetime.now)
-    tasks: Mapped[str] = mapped_column(String(255), nullable=False)
+    details: Mapped[str] = mapped_column(String(255), default="Scraping started")
 
     def __init__(self, queue_id, search_text, tasks):
         self.queue_id = queue_id

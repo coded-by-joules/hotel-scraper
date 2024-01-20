@@ -170,14 +170,13 @@ def scrape_precheck():
     check_status = SearchQueue.query.filter_by(search_text=search_text).order_by(
         SearchQueue.created_date.desc()).first()
     if check_status is None or (check_status.status != "ONGOING"):        
-        result = start_scraping_async(search_text)
+        code = generate_unique_code(6)
+        result = start_scraping_async(search_text, code)
 
         if len(result) > 0:
             # save tasks to database
-            code = generate_unique_code(6)
             search_item = SearchQueue(queue_id=code,
-                                      search_text=search_text,
-                                    tasks=",".join(result))
+                                      search_text=search_text)
             db.session.add(search_item)
             db.session.commit()
 
@@ -232,8 +231,10 @@ def delete_location():
     else:
         return jsonify({"message": "An error occured while deleting this search item"}), 500
 
+@api_routes.route("/get-location/<search_text>")
 def get_location(search_text):
-    result = start_scraping_async(search_text)
+    code = generate_unique_code(6)
+    result = start_scraping_async(search_text, code)
     return result
 
 @api_routes.route('/result/<id>')
@@ -244,3 +245,11 @@ def task_result(id: str) -> dict[str, object]:
         "state": result.state,
         "result": result.result if result.successful() else None,
     }
+
+@api_routes.route('/report', methods=["POST"])
+def report_result():
+    queue_id = request.json.get('queue_id')
+    message = request.json.get('message')
+
+    print(f"{queue_id} - {message}")
+    return "Scraping finished"

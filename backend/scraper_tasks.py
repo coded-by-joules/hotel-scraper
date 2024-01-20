@@ -5,7 +5,7 @@ import json
 import urllib
 import logging
 from .database import db, HotelSearchKeys, HotelInfo
-from celery.exceptions import MaxRetriesExceededError, Ignore
+from celery.exceptions import MaxRetriesExceededError
 import traceback
 import re
 import httpx
@@ -30,6 +30,9 @@ with open(settings_file) as json_file:
     if username and password and wss_host:
         browser_url = f"wss://{settings['username']}:{settings['password']}@{settings['wss_host']}"
 
+class ScrapingError(Exception):
+    pass
+
 #
 # UTILITY FUNCTIONS
 #
@@ -39,14 +42,14 @@ def nodes(node):
         node = node.parent
     yield node            
 
-def start_scraping_async(search_text):
+def start_scraping_async(search_text, code):
     chain = (check_db_for_link.s(search_text) | 
              get_hotel_link.s().set(retry=True) |
              save_hotel_link.s() |
              generate_paginated_hotels.s() |
              start_scraping.s() |
              start_scraping_hotels.s() |
-             save_hotels_to_db.s()).apply_async()
+             save_hotels_to_db.s(queue_id=code)).apply_async(link_error=error_on_scraping.s(queue_id=code))
     
     task_collection = [node.id for node in reversed(list(nodes(chain)))]
     return task_collection
@@ -104,7 +107,7 @@ def get_hotel_link(self,params):
                         raise ValueError(
                                 f"Hotel link is unavailable. Please try again when searching \"{decoded_search_text}\"")
                     else:
-                        #raise Exception("Error testing")
+                        # raise Exception("Error testing")
                         return {"link": final_link, "search_text": search_text, "task_id": self.request.id}
                 except (Error, TimeoutError, Exception) as ex:
                     logger.error(ex)
@@ -122,8 +125,8 @@ def get_hotel_link(self,params):
                         'exc_type': type(mr).__name__,
                         'exc_message': traceback.format_exc().split('\n'),
                         'custom': '...'
-                    })
-                raise Ignore()
+                    })                
+                raise ScrapingError("Error during looking for hotel url") from None
             finally:
                 if page:
                     page.close()
@@ -152,7 +155,7 @@ def save_hotel_link(self, hotel_data):
     else:
         self.update_state(state=states.FAILURE, meta={"custom": "Hotel link fetch was failed"})
         logger.error("Hotel link search was failed")
-        raise Ignore()
+        raise ScrapingError("Error during fetching hotel link") from None
     
 @shared_task(name='generate paginated hotels', bind=True, ignore_result=False)
 def generate_paginated_hotels(self,data):
@@ -167,7 +170,7 @@ def generate_paginated_hotels(self,data):
     counter = 0
 
     tasks = []
-    for i in range(depth_level):
+    for _ in range(depth_level):
         counter += 30
         modified_url = extracted_url[:insert_pos] + \
             f"-oa{counter}" + extracted_url[insert_pos:]
@@ -221,7 +224,7 @@ def start_scraping(self, data):
     else:
         self.update_state(state=states.FAILURE, meta={"custom": "No link to scrape"})
         logger.error("No link to scrape")
-        raise Ignore()
+        raise ScrapingError("Error during searching for links to scraping, or there's no link to scrape") from None
     
 @shared_task(name='get hotel urls', ignore_result=False)
 def get_hotel_urls(hotel_page_link):
@@ -264,7 +267,7 @@ def start_scraping_hotels(self, data):
     else:
         self.update_state(state=states.FAILURE, meta={"custom": "No link to scrape"})
         logger.error("No link to scrape")
-        raise Ignore()
+        raise ScrapingError("Error during scraping for data, or no data to scrape")
     
 @shared_task(name="scrape hotel page", ignore_result=False)
 def scrape_page(url):
@@ -290,7 +293,7 @@ def scrape_page(url):
         return None
     
 @shared_task(name="save to database", bind=True,ignore_result=False)
-def save_hotels_to_db(self, data):
+def save_hotels_to_db(self, data, queue_id):
     search_text = data["search_text"]
     hotel_data = data["data"]
 
@@ -315,7 +318,16 @@ def save_hotels_to_db(self, data):
                     hotel.phone = result['phone']
         db.session.commit()
         
-        return "Saving to data, complete"
+        # emit("report_result", f"{queue_id} - Saving to data, complete")
+        httpx.post("http://localhost:5000/api/report", json={"queue_id": queue_id, "message": "Saving to data, complete"})
+        return f"{queue_id} - Saving to data, complete"
     else:
         self.update_state(state=states.FAILURE, meta={"custom": "No hotel data found"})
-        raise Ignore()
+        raise ScrapingError("Error during saving data to database") from None
+    
+@shared_task(name="chain error handler", ignore_result=False)
+def error_on_scraping(request, exc, traceback, queue_id):
+    print('{0}--\n\n{1} {2}'.format(
+                queue_id, request.id, exc, traceback))
+    httpx.post("http://localhost:5000/api/report", json={"queue_id": queue_id, "message": f"{request.id} - {exc}"})
+    return f"{request.id} - {exc}"

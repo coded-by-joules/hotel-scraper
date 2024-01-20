@@ -41,11 +41,6 @@ export default {
       searchLocations: [],
     };
   },
-  computed: {
-    connected_io() {
-      return state.connected;
-    }
-  },
   methods: {
     startSraping: async (item) => {
       try {
@@ -182,7 +177,6 @@ export default {
   },
   created() {
     this.loadLocations();
-    console.log(this.connected_io);
   },
 };
 </script>
