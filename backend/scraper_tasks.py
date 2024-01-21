@@ -1,12 +1,10 @@
 from playwright.sync_api import sync_playwright, Error, TimeoutError
-from celery import shared_task, states, group
-from celery.result import AsyncResult
+from celery import shared_task, group
 import json
 import urllib
 import logging
 from .database import db, HotelSearchKeys, HotelInfo
 from celery.exceptions import MaxRetriesExceededError
-import traceback
 import re
 import httpx
 from selectolax.parser import HTMLParser
@@ -43,7 +41,7 @@ def nodes(node):
     yield node            
 
 def start_scraping_async(search_text, code):
-    chain = (check_db_for_link.s(search_text) | 
+    chain = (check_db_for_link.s(search_text, code) | 
              get_hotel_link.s().set(retry=True) |
              save_hotel_link.s() |
              generate_paginated_hotels.s() |
@@ -71,13 +69,19 @@ def getHotelListPage(page, context, search_text):
 # CELERY TASKS
 #
 @shared_task(name='check database for link')
-def check_db_for_link(search_text,ignore_result=False):
+def check_db_for_link(search_text,queue_id,ignore_result=False):
     key_item = HotelSearchKeys.query.filter_by(
         search_text=search_text).first()
     if key_item:
         logger.info("Passing hotel link")
         return {"hotel_link": key_item.base_url, "search_text": key_item.search_text}
     else:
+        logger.info("Creating a record for new search text")
+        search_key = HotelSearchKeys(search_text, None)
+        search_key.queue_id = queue_id
+        db.session.add(search_key)
+        db.session.commit()
+
         logger.info("Passing search text")
         return {"hotel_link": None, "search_text": search_text}
 
@@ -108,7 +112,7 @@ def get_hotel_link(self,params):
                                 f"Hotel link is unavailable. Please try again when searching \"{decoded_search_text}\"")
                     else:
                         # raise Exception("Error testing")
-                        return {"link": final_link, "search_text": search_text, "task_id": self.request.id}
+                        return {"link": final_link, "search_text": search_text}
                 except (Error, TimeoutError, Exception) as ex:
                     logger.error(ex)
                     raise self.retry(max_retries=1, countdown=5)
@@ -118,14 +122,7 @@ def get_hotel_link(self,params):
                     if browser:
                         browser.close()
             except (MaxRetriesExceededError) as mr:
-                logger.error("Retries exceeded")
-                self.update_state(
-                    state=states.FAILURE,
-                    meta={
-                        'exc_type': type(mr).__name__,
-                        'exc_message': traceback.format_exc().split('\n'),
-                        'custom': '...'
-                    })                
+                logger.error("Retries exceeded")             
                 raise ScrapingError("Error during looking for hotel url") from None
             finally:
                 if page:
@@ -133,28 +130,20 @@ def get_hotel_link(self,params):
                 if browser:
                     browser.close()
 
-@shared_task(name='save hotel link', bind=True,ignore_result=False)
+@shared_task(name='save hotel link',bind=True,ignore_result=False)
 def save_hotel_link(self, hotel_data):
     hotel_link = hotel_data["link"]
-    task = AsyncResult(hotel_data["task_id"])
     search_text = hotel_data["search_text"]
 
-    if task.state == "SUCCESS":
-        exists = db.session.query(HotelSearchKeys.id).filter_by(
-                base_url=hotel_link).first() is not None
-        if not exists:
-            search_item = HotelSearchKeys(
-                search_text,hotel_link)
-            db.session.add(search_item)
+    search_query = HotelSearchKeys.query.filter_by(search_text=search_text).first()
+
+    if search_query:
+        if search_query.base_url is None:
+            search_query.base_url = hotel_link
             db.session.commit()
-            logger.info("Saved link to database")
-        else:
-            logger.info("Link already exists")
-    
         return {"search_text": search_text, "url": f"{site_url}{hotel_link}"}
     else:
-        self.update_state(state=states.FAILURE, meta={"custom": "Hotel link fetch was failed"})
-        logger.error("Hotel link search was failed")
+        logger.error("Hotel link saving was failed")
         raise ScrapingError("Error during fetching hotel link") from None
     
 @shared_task(name='generate paginated hotels', bind=True, ignore_result=False)
@@ -222,7 +211,6 @@ def start_scraping(self, data):
 
         return {"search_text": search_text, "urls": final_hotel_urls}
     else:
-        self.update_state(state=states.FAILURE, meta={"custom": "No link to scrape"})
         logger.error("No link to scrape")
         raise ScrapingError("Error during searching for links to scraping, or there's no link to scrape") from None
     
@@ -265,7 +253,6 @@ def start_scraping_hotels(self, data):
         
         return {"search_text": search_text, "data": hotel_data}
     else:
-        self.update_state(state=states.FAILURE, meta={"custom": "No link to scrape"})
         logger.error("No link to scrape")
         raise ScrapingError("Error during scraping for data, or no data to scrape")
     
@@ -319,15 +306,14 @@ def save_hotels_to_db(self, data, queue_id):
         db.session.commit()
         
         # emit("report_result", f"{queue_id} - Saving to data, complete")
-        httpx.post("http://localhost:5000/api/report", json={"queue_id": queue_id, "message": "Saving to data, complete"})
+        httpx.post("http://localhost:5000/api/report", json={"queue_id": queue_id, "message": "Saving to data, complete", "status": "SUCCESS"})
         return f"{queue_id} - Saving to data, complete"
     else:
-        self.update_state(state=states.FAILURE, meta={"custom": "No hotel data found"})
         raise ScrapingError("Error during saving data to database") from None
     
 @shared_task(name="chain error handler", ignore_result=False)
 def error_on_scraping(request, exc, traceback, queue_id):
     print('{0}--\n\n{1} {2}'.format(
                 queue_id, request.id, exc, traceback))
-    httpx.post("http://localhost:5000/api/report", json={"queue_id": queue_id, "message": f"{request.id} - {exc}"})
+    httpx.post("http://localhost:5000/api/report", json={"queue_id": queue_id, "message": f"{request.id} - {exc}", "status": "ERROR"})
     return f"{request.id} - {exc}"

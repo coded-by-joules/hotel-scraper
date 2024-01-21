@@ -12,7 +12,7 @@
 import TheHeader from "./components/TheHeader.vue";
 import SearchBox from "./components/SearchBox.vue";
 import LocationList from "./components/LocationItems/LocationList.vue";
-import { state } from "./socket";
+import { socket } from "./socket";
 import axios from "axios";
 
 const getLocationById = (arr, id) => {
@@ -83,10 +83,9 @@ export default {
             if (response.status === 200) {
               const fetchedItem = response.data;
 
-              locationList[itemIndex].status = "loaded";
               locationList[itemIndex]["queue_id"] = fetchedItem["queue_id"];
             } else {
-
+              // nakalimtan
             }
           }
         });
@@ -108,8 +107,8 @@ export default {
           } else {
             const fetchedItem = response.data;
 
-            locationItem.status = "loaded";
-            locationItem.count = fetchedItem["count"];
+            locationItem.status = "ongoing";
+            locationItem.queue_id = fetchedItem["queue_id"];
           }
         });
       }
@@ -161,22 +160,45 @@ export default {
         } else {
           if (resp.status === 200) {
             const locations = resp.data["locations"];
-            locations.forEach(({ count, id, search_key }) => {
+            locations.forEach(({ count, id, search_key, queue_code }) => {
+              let status_message = "ongoing";
+
+              if (queue_code === null) {
+                status_message = "loaded";
+              }
+
               this.searchLocations.push({
                 id: id,
                 location: search_key,
                 count: count,
-                status: "loaded",
-                queue_id: null
+                status: status_message,
+                queue_id: queue_code,
               });
             });
           }
         }
       });
     },
+    messageReceived(count, queue_id, status) {
+      const locationIndex = this.searchLocations.findIndex((item) => item["queue_id"] === queue_id);
+      const locationItem = this.searchLocations[locationIndex];
+      let status_message = "loaded";
+
+      if (status === "ERROR") {
+        if (locationItem.count > 0) status_message = "error_retain";
+        else status_message = "error";
+      }
+
+      locationItem.status = status_message;
+      locationItem.count = count;
+      locationItem.queue_id = null;
+    }
   },
   created() {
     this.loadLocations();
   },
+  mounted() {    
+    socket.on("message", this.messageReceived);
+  }
 };
 </script>

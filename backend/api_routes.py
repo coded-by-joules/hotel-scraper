@@ -7,6 +7,7 @@ from . scraper_tasks import start_scraping_async
 from celery.result import AsyncResult
 import random
 from string import ascii_uppercase
+from .socket_config import socket_io
 
 api_routes = Blueprint("api", __name__)
 
@@ -103,7 +104,8 @@ def get_locations():
         location_json.append({
             "id": location.id,
             "search_key": location.search_text,
-            "count": location.children.count()
+            "count": location.children.count(),
+            "queue_code": location.queue_id
         })
 
     return jsonify({"locations": location_json}), 200
@@ -178,6 +180,12 @@ def scrape_precheck():
             search_item = SearchQueue(queue_id=code,
                                       search_text=search_text)
             db.session.add(search_item)
+            
+            # inject search key if exists
+            search_key = HotelSearchKeys.query.filter_by(search_text=search_text).first()
+            if search_key:
+                search_key.queue_id = code
+
             db.session.commit()
 
             return jsonify({"message": "Scraping now started", "queue_id": code}), 200
@@ -218,24 +226,30 @@ def download_file():
     return jsonify({"message": "An error occured during download"}), 500
 
 
-@api_routes.route('/delete-location', methods=['POST'])
-def delete_location():
-    search_text = request.json.get('search_text')
+def delete_location(search_text):
     check_location = HotelSearchKeys.query.filter_by(
         search_text=search_text).first()
     if check_location:
         db.session.delete(check_location)
-        db.session.commit()
+        db.session.commit()    
+        return True
+    else:
+        return False
 
+@api_routes.route('/delete-location', methods=['POST'])
+def delete_location_api():
+    search_text = request.json.get('search_text')
+    start_delete = delete_location(search_text)
+    if start_delete:
         return jsonify({"message": "Search key now deleted"}), 200
     else:
         return jsonify({"message": "An error occured while deleting this search item"}), 500
+    
 
-@api_routes.route("/get-location/<search_text>")
-def get_location(search_text):
-    code = generate_unique_code(6)
-    result = start_scraping_async(search_text, code)
-    return result
+# @api_routes.route("/get-location")
+# def get_location():
+#     socket_io.send(("Eduard <3 G-ber", "123", "COMPLETE"))
+#     return "Eduard <3 G-ber"
 
 @api_routes.route('/result/<id>')
 def task_result(id: str) -> dict[str, object]:
@@ -250,6 +264,28 @@ def task_result(id: str) -> dict[str, object]:
 def report_result():
     queue_id = request.json.get('queue_id')
     message = request.json.get('message')
+    status = request.json.get('status')
 
-    print(f"{queue_id} - {message}")
-    return "Scraping finished"
+    task = SearchQueue.query.filter_by(queue_id=queue_id).first()    
+    if task:
+        search_text = task.search_text
+
+        task.status = status
+        task.details = message
+        
+        count = 0
+        location = HotelSearchKeys.query.filter_by(search_text=search_text).first()
+        
+        if location:
+            count = location.children.count()
+            location.queue_id = None # clear queue_id on complete
+
+        if status == "ERROR" and location.base_url is None:
+            delete_location(search_text)
+
+        db.session.commit()
+        socket_io.send((count, queue_id, status))
+    else:
+        return jsonify({"message": "Error when receiving report from worker"}), 500
+    
+    return jsonify({"message": "Scraping finished"}), 200

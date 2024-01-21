@@ -11,7 +11,8 @@ class HotelSearchKeys(db.Model):
         Integer, primary_key=True, autoincrement=True)
     search_text: Mapped[str] = mapped_column(
         String(255), nullable=False, unique=True)
-    base_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    base_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    queue_id: Mapped[str] = mapped_column(String(10), nullable=True)
     children: Mapped[List["HotelInfo"]] = relationship(
         backref="searchkey", lazy="dynamic", cascade="all, delete")
 
@@ -49,8 +50,7 @@ class SearchQueue(db.Model):
         DateTime(timezone=False), default=datetime.now)
     details: Mapped[str] = mapped_column(String(255), default="Scraping started")
 
-    def __init__(self, queue_id, search_text, tasks):
+    def __init__(self, queue_id, search_text):
         self.queue_id = queue_id
         self.search_text = search_text
-        self.tasks = tasks
 
