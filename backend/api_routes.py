@@ -289,3 +289,11 @@ def report_result():
         return jsonify({"message": "Error when receiving report from worker"}), 500
     
     return jsonify({"message": "Scraping finished"}), 200
+
+@api_routes.route('/progress', methods=["POST"])
+def progress_task():
+    queue_id = request.json.get('queue_id')
+    progress = request.json.get('progress')
+
+    socket_io.emit("progress", (queue_id, progress))
+    return f"Task {queue_id} progressed to {progress} out of 5 steps"

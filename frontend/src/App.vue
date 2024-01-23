@@ -20,6 +20,12 @@ const getLocationById = (arr, id) => {
 
   return locationItem;
 };
+
+const getLocationByQueueID = (arr, queue_id) => {
+  const locationIndex = arr.findIndex((item) => item["queue_id"] === queue_id);
+  
+  return locationIndex;
+}
 const host_url = import.meta.env.DEV ? "http://localhost:5000" : "";
 
 export default {
@@ -70,7 +76,10 @@ export default {
           count: "0",
           id: id,
           queue_id: null,
+          progress: 0
         };
+
+
         const locationList = this.searchLocations;
         locationList.push(newItem);
 
@@ -84,9 +93,8 @@ export default {
               const fetchedItem = response.data;
 
               locationList[itemIndex]["queue_id"] = fetchedItem["queue_id"];
-            } else {
-              // nakalimtan
-            }
+              locationList[itemIndex]["progress"] = 0;
+            } 
           }
         });
       } else {
@@ -109,6 +117,7 @@ export default {
 
             locationItem.status = "ongoing";
             locationItem.queue_id = fetchedItem["queue_id"];
+            locationItem.progress = 0;
           }
         });
       }
@@ -173,6 +182,7 @@ export default {
                 count: count,
                 status: status_message,
                 queue_id: queue_code,
+                progress: 0,
               });
             });
           }
@@ -180,7 +190,7 @@ export default {
       });
     },
     messageReceived(count, queue_id, status) {
-      const locationIndex = this.searchLocations.findIndex((item) => item["queue_id"] === queue_id);
+      const locationIndex = getLocationByQueueID(this.searchLocations, queue_id);
       const locationItem = this.searchLocations[locationIndex];
       let status_message = "loaded";
 
@@ -192,13 +202,21 @@ export default {
       locationItem.status = status_message;
       locationItem.count = count;
       locationItem.queue_id = null;
-    }
+      locationItem.progress = 0;
+    },
+    updateProgressBar(queue_id, progress) {
+      const locationIndex = getLocationByQueueID(this.searchLocations, queue_id);
+      const locationItem = this.searchLocations[locationIndex];
+      
+      locationItem.progress = progress;
+    },
   },
   created() {
     this.loadLocations();
   },
   mounted() {    
     socket.on("message", this.messageReceived);
+    socket.on("progress", this.updateProgressBar);
   }
 };
 </script>

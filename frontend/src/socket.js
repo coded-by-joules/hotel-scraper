@@ -4,6 +4,7 @@ import { io } from "socket.io-client";
 export const state = reactive({
   connected: false,
   messageEvents: [],
+  progressEvents: [],
 });
 
 // "undefined" means the URL will be computed from the `window.location` object
@@ -22,4 +23,8 @@ socket.on("disconnect", () => {
 
 socket.on("message", (...args) => {
   state.messageEvents.push(args);
+});
+
+socket.on("progress", (...args) => {
+  state.progressEvents.push(args);
 });

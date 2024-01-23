@@ -6,7 +6,6 @@ from .api_routes import api_routes
 from .config import config
 from flask_migrate import Migrate
 from .socket_config import socket_io
-import os
 
 def create_app(config_mode):
     app = Flask(__name__, static_folder="../frontend_dist/assets", template_folder="../frontend_dist")

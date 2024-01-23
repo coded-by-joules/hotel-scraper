@@ -8,12 +8,14 @@ from celery.exceptions import MaxRetriesExceededError
 import re
 import httpx
 from selectolax.parser import HTMLParser
+import os
 
 site_url = "https://www.tripadvisor.com/"
 search_url = "https://www.tripadvisor.com/Search?q="
 
 settings_file = "settings.json"
 browser_url = None
+host_url = os.getenv("DEPLOY_URL")
 
 logger = logging.getLogger(__name__)
 
@@ -42,11 +44,11 @@ def nodes(node):
 
 def start_scraping_async(search_text, code):
     chain = (check_db_for_link.s(search_text, code) | 
-             get_hotel_link.s().set(retry=True) |
+             get_hotel_link.s(queue_id=code).set(retry=True) |
              save_hotel_link.s() |
-             generate_paginated_hotels.s() |
-             start_scraping.s() |
-             start_scraping_hotels.s() |
+             generate_paginated_hotels.s(queue_id=code) |
+             start_scraping.s(queue_id=code) |
+             start_scraping_hotels.s(queue_id=code) |
              save_hotels_to_db.s(queue_id=code)).apply_async(link_error=error_on_scraping.s(queue_id=code))
     
     task_collection = [node.id for node in reversed(list(nodes(chain)))]
@@ -65,6 +67,8 @@ def getHotelListPage(page, context, search_text):
         "div[data-test-target='nav-links'] a").filter(has_text="Hotels")
     return hotel_link.get_attribute("href")
 
+def progress_task(queue_id, progress):
+    httpx.post(f"{host_url}/api/progress", json={"queue_id": queue_id, "progress": progress})
 #
 # CELERY TASKS
 #
@@ -72,8 +76,10 @@ def getHotelListPage(page, context, search_text):
 def check_db_for_link(search_text,queue_id,ignore_result=False):
     key_item = HotelSearchKeys.query.filter_by(
         search_text=search_text).first()
+    
     if key_item:
         logger.info("Passing hotel link")
+        progress_task(queue_id, 1)
         return {"hotel_link": key_item.base_url, "search_text": key_item.search_text}
     else:
         logger.info("Creating a record for new search text")
@@ -83,14 +89,17 @@ def check_db_for_link(search_text,queue_id,ignore_result=False):
         db.session.commit()
 
         logger.info("Passing search text")
+        progress_task(queue_id, 1)
         return {"hotel_link": None, "search_text": search_text}
 
 @shared_task(name='get the hotel link',bind=True,ignore_result=False)
-def get_hotel_link(self,params):
+def get_hotel_link(self,params,queue_id):
     hotel_link = params["hotel_link"]
     search_text = params["search_text"]
+
     if hotel_link is not None:
-        return {"link": hotel_link, "search_text": search_text, "task_id": self.request.id}
+        progress_task(queue_id, 2)
+        return {"link": hotel_link, "search_text": search_text}
     else:
         decoded_search_text = urllib.parse.unquote_plus(search_text)
         with sync_playwright() as pw:
@@ -112,6 +121,7 @@ def get_hotel_link(self,params):
                                 f"Hotel link is unavailable. Please try again when searching \"{decoded_search_text}\"")
                     else:
                         # raise Exception("Error testing")
+                        progress_task(queue_id, 2)
                         return {"link": final_link, "search_text": search_text}
                 except (Error, TimeoutError, Exception) as ex:
                     logger.error(ex)
@@ -147,7 +157,7 @@ def save_hotel_link(self, hotel_data):
         raise ScrapingError("Error during fetching hotel link") from None
     
 @shared_task(name='generate paginated hotels', bind=True, ignore_result=False)
-def generate_paginated_hotels(self,data):
+def generate_paginated_hotels(self,data,queue_id):
     hotel_link = data["url"]
     search_text = data["search_text"]
 
@@ -173,6 +183,7 @@ def generate_paginated_hotels(self,data):
         if link is not None:
             hotel_urls.append(link)
 
+    progress_task(queue_id, 3)
     return {"search_text": search_text, "urls": hotel_urls}
 
 
@@ -188,7 +199,7 @@ def validate_link(link):
         return None
     
 @shared_task(name='start scraping', bind=True, ignore_result=False)
-def start_scraping(self, data):
+def start_scraping(self, data, queue_id):
     search_text = data["search_text"]
     hotel_links = data["urls"]
 
@@ -209,6 +220,7 @@ def start_scraping(self, data):
         logger.info("Flattening the List")
         final_hotel_urls = [x for xs in hotel_urls for x in xs]
 
+        progress_task(queue_id, 4)
         return {"search_text": search_text, "urls": final_hotel_urls}
     else:
         logger.error("No link to scrape")
@@ -234,7 +246,7 @@ def get_hotel_urls(hotel_page_link):
         return None
     
 @shared_task(name="start scraping hotel", bind=True, ignore_result=False)
-def start_scraping_hotels(self, data):
+def start_scraping_hotels(self, data, queue_id):
     search_text = data["search_text"]
     hotel_list = data["urls"]
     if len(hotel_list) > 0:
@@ -251,6 +263,7 @@ def start_scraping_hotels(self, data):
             if result is not None:
                 hotel_data.append(result) 
         
+        progress_task(queue_id, 5)
         return {"search_text": search_text, "data": hotel_data}
     else:
         logger.error("No link to scrape")
@@ -306,7 +319,8 @@ def save_hotels_to_db(self, data, queue_id):
         db.session.commit()
         
         # emit("report_result", f"{queue_id} - Saving to data, complete")
-        httpx.post("http://localhost:5000/api/report", json={"queue_id": queue_id, "message": "Saving to data, complete", "status": "SUCCESS"})
+        progress_task(queue_id, 6)
+        httpx.post(f"{host_url}/api/report", json={"queue_id": queue_id, "message": "Saving to data, complete", "status": "SUCCESS"})
         return f"{queue_id} - Saving to data, complete"
     else:
         raise ScrapingError("Error during saving data to database") from None
@@ -315,5 +329,5 @@ def save_hotels_to_db(self, data, queue_id):
 def error_on_scraping(request, exc, traceback, queue_id):
     print('{0}--\n\n{1} {2}'.format(
                 queue_id, request.id, exc, traceback))
-    httpx.post("http://localhost:5000/api/report", json={"queue_id": queue_id, "message": f"{request.id} - {exc}", "status": "ERROR"})
+    httpx.post(f"{host_url}/api/report", json={"queue_id": queue_id, "message": f"{request.id} - {exc}", "status": "ERROR"})
     return f"{request.id} - {exc}"
