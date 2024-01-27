@@ -1,5 +1,5 @@
 <template>
-  <div :class="setupClass()" :key="location.id">
+  <div :class="setupClass" :key="location.id">
     <div class="px-3">
       <span class="font-semibold">{{ location.location }}</span> |
       <span class="text-sm font-normal">{{ hotelStatus }}</span>
@@ -8,7 +8,11 @@
       <a
         href="#"
         class="flex items-center justify-center hover:bg-blue-500 w-8"
-        v-if="location.status === 'loaded' || location.status === 'error' || location.status === 'error_retain'"
+        v-if="
+          location.status === 'loaded' ||
+          location.status === 'error' ||
+          location.status === 'error_retain'
+        "
         @click="refreshLoc()"
       >
         <svg
@@ -72,6 +76,11 @@
 export default {
   props: ["location"],
   inject: ["refreshLocation", "deleteLocation", "host_url"],
+  data() {
+    return {
+      progressBar: 0,
+    };
+  },
   computed: {
     hotelStatus() {
       if (this.location.status === "loaded") {
@@ -88,11 +97,27 @@ export default {
         return "scraping...";
       }
     },
+    setupClass() {
+      const progress = this.location.progress;
+      const status = this.location.status;
+
+      console.log("Current progress: " + progress);
+      if (status != "ongoing") return ["item", status];
+      else {
+        const progressPercents = [
+          "after:w-0",
+          "after:w-1/6",
+          "after:w-1/3",
+          "after:w-1/2",
+          "after:w-2/3",
+          "after:w-5/6",
+          "after:w-full",
+        ];
+        return ["item", status, progressPercents[progress]];
+      }
+    },
   },
   methods: {
-    setupClass() {
-      return ["item", this.location.status];
-    },
     refreshLoc() {
       this.refreshLocation(this.location);
     },
@@ -112,10 +137,21 @@ export default {
 
 <style scoped>
 .item {
-  @apply my-3 text-white border-4 border-transparent flex justify-between h-12 leading-10 align-middle;
+  @apply my-3 text-white border-4 border-transparent flex justify-between h-12 leading-10 align-middle relative;
 }
 .ongoing {
   @apply border-white;
+}
+
+.ongoing:after {
+  content: "\A";
+  background-color: rgb(22, 163, 74);
+  top: 0;
+  bottom: 0;
+  position: absolute;
+  left: 0;
+  opacity: 0.3;
+  transition: all 2s;
 }
 
 .loaded {

@@ -7,9 +7,8 @@ from selectolax.parser import HTMLParser
 import httpx
 import urllib.parse
 from hotel_link_generator import generate_paginated_hotels
-import sys
 
-#settings_file = f"{os.path.abspath(__file__.replace('main.py', ''))}\settings.json"
+# settings_file = f"{os.path.abspath(__file__.replace('main.py', ''))}\settings.json"
 settings_file = "settings.json"
 browser_url = None
 
@@ -29,43 +28,33 @@ site_url = "https://www.tripadvisor.com/"
 search_url = "https://www.tripadvisor.com/Search?q="
 
 
-def post_results(data, update_type, api_url, message=None):
+def post_results(data, update_type, api_url, queue_id, message=None):
     headers = {"Content-Type": "application/json"}
-    data = {"data": data, "update_type": update_type}
-    status = 0
-    resp_message = message
+    data = {"data": data, "update_type": update_type, "queue_id": queue_id}
 
-    if update_type != "post_log":
-        response = requests.post(
-            f"{api_url}/post-results", headers=headers, json=data, verify=False)
-        status = response.status_code
-        resp_message = response.json()['message']
-
-    # add a log
-    log = {"message": resp_message, "status": "SUCCESS" if status ==
-           200 else "ERROR", "update_type": "post_log"}
-    requests.post(f"{api_url}/post-results",
-                  headers=headers, json=log, verify=False)
+    requests.post(
+        f"{api_url}/post-results", headers=headers, json=data, verify=False)
 
 
-def postlog(message, api_url):
-    post_results(None, "post_log", api_url, message)
-
-
-def end_scraping(search_text, api_url):
+def report_status(message, api_url, queue_id, status):
     headers = {"Content-Type": "application/json"}
-    data = {"search_text": search_text}
-
-    requests.post(f"{api_url}/end-scraping",
-                  headers=headers, json=data, verify=False)
+    requests.post(f"{api_url}/report", headers=headers, json={"message": message,
+                  "queue_id": queue_id, "status": status})
 
 
-def get_hotel_url(search_text, api_url):
+def progress_task(step, api_url, queue_id):
+    headers = {"Content-Type": "application/json"}
+    requests.post(f"{api_url}/progress", headers=headers, json={"progress": step,
+                  "queue_id": queue_id})
+
+
+def get_hotel_url(search_text, api_url, queue_id):
     if search_text in ["", None]:
         return None
 
     print("Checking if location url exists")
-    params = {'key': search_text}
+    params = {'key': urllib.parse.quote_plus(
+        search_text), 'queue_id': queue_id}
     response = requests.get(
         f"{api_url}/search", params=params, timeout=5000)
     if response.status_code == 200:
@@ -111,12 +100,13 @@ async def getHotelUrls(client, full_link):
         return None
 
 
-async def start_scraping(search_text, hotel_link, api_url):
+async def start_scraping(search_text, hotel_link, api_url, queue_id):
     decoded_search_text = urllib.parse.unquote_plus(search_text)
 
     print("Start deep-search")
     paginated_urls = await generate_paginated_hotels(hotel_link, site_url, user_agent, proxies, depth_level)
     print("Collected URLs:", len(paginated_urls))
+    progress_task(3, api_url, queue_id)
 
     print("Getting hotel urls")
     tasks = []
@@ -134,6 +124,7 @@ async def start_scraping(search_text, hotel_link, api_url):
     if len(hotel_urls) == 0:
         raise ValueError(
             f"No hotels found. Please try again when searching \"{decoded_search_text}\"")
+    progress_task(4, api_url, queue_id)
 
     final_hotel_urls = [x for xs in hotel_urls for x in xs]
     print("Flattened:", len(final_hotel_urls))
@@ -142,17 +133,19 @@ async def start_scraping(search_text, hotel_link, api_url):
     if len(hotel_list) == 0:
         raise ValueError(
             f"Unable to fetch hotels. Please try again when searching \"{decoded_search_text}\"")
+    progress_task(5, api_url, queue_id)
 
     # submit data to server
     post_results(
-        {"results": hotel_list, "search_text": decoded_search_text}, "send_hotel_list", api_url)
+        {"results": hotel_list, "search_text": decoded_search_text}, "send_hotel_list", api_url, queue_id)
 
 
-async def main(search_text, current_host):
-    decoded_search_text = urllib.parse.unquote_plus(search_text)    
+async def main(search_text, current_host, queue_id):
+    decoded_search_text = urllib.parse.unquote_plus(search_text)
     api_url = f"http://{current_host}/api"
-    full_link = get_hotel_url(decoded_search_text, api_url)
-    exit_code = 0
+    full_link = get_hotel_url(decoded_search_text, api_url, queue_id)
+
+    progress_task(1, api_url, queue_id)
     print(full_link)
 
     try:
@@ -177,42 +170,38 @@ async def main(search_text, current_host):
 
                 full_link = f"{site_url}{hotel_link}"
                 post_results({"search_text": decoded_search_text, "base_url": full_link},
-                             "send_hotel_link", api_url)
+                             "send_hotel_link", api_url, queue_id)
 
                 await browser.close()
 
-        await start_scraping(search_text, full_link, api_url)
+        progress_task(2, api_url, queue_id)
+        await start_scraping(search_text, full_link, api_url, queue_id)
+
+        report_status("Scraping successfully finished",
+                      api_url, queue_id, "SUCCESS")
 
     except requests.exceptions.Timeout:
         message = f"Timeout error occured when searching \"{decoded_search_text}\""
         print(message)
-        postlog(message, api_url)
-        exit_code = 1
+        report_status(message, api_url, queue_id, "ERROR")
     except httpx.RequestError:
         print(message)
         message = f"There was an error occured during hotel search requests for \"{decoded_search_text}\""
-        postlog(message, api_url)
-        exit_code = 1
+        report_status(message, api_url, queue_id, "ERROR")
     except PWTimeoutError:
         await browser.close()
         message = f"Timeout error occured when searching \"{decoded_search_text}\""
         print(message)
-        postlog(message, api_url)
-        exit_code = 1
+        report_status(message, api_url, queue_id, "ERROR")
     except ValueError as err:
         message = f"An error occured when searching \"{decoded_search_text}\": {err.args[0]}"
         print(message)
-        postlog(message, api_url)
-        exit_code = 1
+        report_status(message, api_url, queue_id, "ERROR")
     except Exception as e:
         message = f"An unknown error has occured when searching \"{decoded_search_text}\""
         print(message)
         print(e)
-        postlog(message, api_url)
-        exit_code = 1
-    finally:
-        end_scraping(search_text, api_url)
-        sys.exit(exit_code)
+        report_status(message, api_url, queue_id, "ERROR")
 
 
 if __name__ == "__main__":

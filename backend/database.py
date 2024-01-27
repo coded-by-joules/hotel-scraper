@@ -10,13 +10,15 @@ class HotelSearchKeys(db.Model):
         Integer, primary_key=True, autoincrement=True)
     search_text: Mapped[str] = mapped_column(
         String(255), nullable=False, unique=True)
-    base_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    base_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    queue_id: Mapped[str] = mapped_column(String(10), nullable=True)
     children: Mapped[List["HotelInfo"]] = relationship(
         backref="searchkey", lazy="dynamic", cascade="all, delete")
 
-    def __init__(self, search_text, base_url):
+    def __init__(self, search_text, base_url, queue_id=None):
         self.search_text = search_text
         self.base_url = base_url
+        self.queue_id = queue_id
 
 
 class HotelInfo(db.Model):
@@ -39,26 +41,18 @@ class HotelInfo(db.Model):
         self.phone = phone
 
 
-class LogDetails(db.Model):
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True)
-    message: Mapped[str] = mapped_column(String(500))
-    status: Mapped[str] = mapped_column(String(50))
-    created_date: Mapped[datetime] = mapped_column(
-        DateTime(timezone=False), default=datetime.now)
-
-    def __init__(self, message, status):
-        self.message = message
-        self.status = status
-
-
 class SearchQueue(db.Model):
     id: Mapped[int] = mapped_column(
         Integer, primary_key=True, autoincrement=True)
+    queue_id: Mapped[str] = mapped_column(
+        String(10), nullable=False, unique=True)
     search_text: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="ONGOING")
     created_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), default=datetime.now)
+    details: Mapped[str] = mapped_column(
+        String(255), default="Scraping started")
 
-    def __init__(self, search_text):
+    def __init__(self, queue_id, search_text):
+        self.queue_id = queue_id
         self.search_text = search_text

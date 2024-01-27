@@ -12,6 +12,7 @@
 import TheHeader from "./components/TheHeader.vue";
 import SearchBox from "./components/SearchBox.vue";
 import LocationList from "./components/LocationItems/LocationList.vue";
+import { socket } from "./socket";
 import axios from "axios";
 
 const getLocationById = (arr, id) => {
@@ -19,7 +20,13 @@ const getLocationById = (arr, id) => {
 
   return locationItem;
 };
-const host_url = import.meta.env.DEV ? "http://localhost:7000" : "";
+
+const getLocationByQueueID = (arr, queue_id) => {
+  const locationIndex = arr.findIndex((item) => item["queue_id"] === queue_id);
+
+  return locationIndex;
+};
+const host_url = import.meta.env.DEV ? "http://localhost:5000" : "";
 
 export default {
   components: {
@@ -43,12 +50,9 @@ export default {
   methods: {
     startSraping: async (item) => {
       try {
-        const resp = await axios.post(
-          `${host_url}/api/start-scraping`,
-          {
-            "search-text": item.location,
-          }
-        );
+        const resp = await axios.post(`${host_url}/api/start-scraping`, {
+          "search-text": item.location,
+        });
 
         return resp;
       } catch (err) {
@@ -68,7 +72,10 @@ export default {
           location: item,
           count: "0",
           id: id,
+          queue_id: null,
+          progress: 0,
         };
+
         const locationList = this.searchLocations;
         locationList.push(newItem);
 
@@ -81,10 +88,8 @@ export default {
             if (response.status === 200) {
               const fetchedItem = response.data;
 
-              locationList[itemIndex].status = "loaded";
-              locationList[itemIndex].count = fetchedItem["count"];
-            } else {
-
+              locationList[itemIndex]["queue_id"] = fetchedItem["queue_id"];
+              locationList[itemIndex]["progress"] = 0;
             }
           }
         });
@@ -106,8 +111,9 @@ export default {
           } else {
             const fetchedItem = response.data;
 
-            locationItem.status = "loaded";
-            locationItem.count = fetchedItem["count"];
+            locationItem.status = "ongoing";
+            locationItem.queue_id = fetchedItem["queue_id"];
+            locationItem.progress = 0;
           }
         });
       }
@@ -121,10 +127,9 @@ export default {
       const commenceDelete = async (item) => {
         try {
           console.log(item.location);
-          const response = await axios.post(
-            `${host_url}/api/delete-location`,
-            { search_text: item.location }
-          );
+          const response = await axios.post(`${host_url}/api/delete-location`, {
+            search_text: item.location,
+          });
           return response;
         } catch (err) {
           console.log(err);
@@ -143,9 +148,7 @@ export default {
     loadLocations() {
       const getData = async () => {
         try {
-          const resp = await axios.get(
-            `${host_url}/api/get-locations`
-          );
+          const resp = await axios.get(`${host_url}/api/get-locations`);
           return resp;
         } catch (err) {
           console.log(err);
@@ -159,21 +162,60 @@ export default {
         } else {
           if (resp.status === 200) {
             const locations = resp.data["locations"];
-            locations.forEach(({ count, id, search_key }) => {
+            locations.forEach(({ count, id, search_key, queue_code }) => {
+              let status_message = "ongoing";
+
+              if (queue_code === null) {
+                status_message = "loaded";
+              }
+
               this.searchLocations.push({
                 id: id,
                 location: search_key,
                 count: count,
-                status: "loaded",
+                status: status_message,
+                queue_id: queue_code,
+                progress: 0,
               });
             });
           }
         }
       });
     },
+    messageReceived(count, queue_id, status) {
+      const locationIndex = getLocationByQueueID(
+        this.searchLocations,
+        queue_id
+      );
+      const locationItem = this.searchLocations[locationIndex];
+      let status_message = "loaded";
+
+      if (status === "ERROR") {
+        if (locationItem.count > 0) status_message = "error_retain";
+        else status_message = "error";
+      }
+
+      locationItem.status = status_message;
+      locationItem.count = count;
+      locationItem.queue_id = null;
+      locationItem.progress = 0;
+    },
+    updateProgressBar(queue_id, progress) {
+      const locationIndex = getLocationByQueueID(
+        this.searchLocations,
+        queue_id
+      );
+      const locationItem = this.searchLocations[locationIndex];
+
+      locationItem.progress = progress;
+    },
   },
   created() {
     this.loadLocations();
+  },
+  mounted() {
+    socket.on("message", this.messageReceived);
+    socket.on("progress", this.updateProgressBar);
   },
 };
 </script>

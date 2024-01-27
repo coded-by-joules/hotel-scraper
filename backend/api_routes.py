@@ -1,23 +1,47 @@
 from . import db
 from . database import *
-from flask import Blueprint, jsonify, request, send_file
-from flask_sqlalchemy import SQLAlchemy
+from flask import Blueprint, jsonify, request, send_file, Response
 import subprocess
 import pandas as pd
 from io import BytesIO
 from urllib.parse import urlparse
+from .socket_config import socket_io
+import random
+from string import ascii_uppercase
+import urllib.parse
 
 api_routes = Blueprint("api", __name__)
+
+
+def generate_unique_code(length):
+    while True:
+        code = ""
+        for _ in range(length):
+            code += random.choice(ascii_uppercase)
+
+        code_exist = SearchQueue.query.filter_by(queue_id=code).first()
+        if not code_exist:
+            break
+
+    return code
 
 
 @api_routes.route('/search')
 def get_search_url():
     search_key = request.args.get('key')
+    queue_id = request.args.get('queue_id')
+
+    decoded_search_key = urllib.parse.unquote_plus(search_key)
+
     if search_key:
         key_item = HotelSearchKeys.query.filter_by(
-            search_text=search_key).first()
+            search_text=decoded_search_key).first()
         if key_item:
             return jsonify({"url": key_item.base_url}), 200
+        else:
+            search_item = HotelSearchKeys(decoded_search_key, None, queue_id)
+            db.session.add(search_item)
+            db.session.commit()
 
     return jsonify({"url": None}), 404
 
@@ -32,16 +56,13 @@ def post_results():
             data = request.json.get('data')
             search_text = data['search_text']
 
-            exists = db.session.query(HotelSearchKeys.id).filter_by(
-                base_url=data['base_url']).first() is not None
-            if not exists:
-                search_item = HotelSearchKeys(
-                    search_text, data['base_url'])
-                db.session.add(search_item)
+            search_item = HotelSearchKeys.query.filter_by(
+                search_text=search_text).first()
+            if search_item:
+                search_item.base_url = data['base_url']
+
                 db.session.commit()
-                result_message = f"Successfully added {search_text} to database"
-            else:
-                result_message = f"{search_text} already in database"
+                result_message = f"Updated base_url for {search_text}"
 
         if update_type == "send_hotel_list":
             data = request.json.get('data')
@@ -67,14 +88,6 @@ def post_results():
             db.session.commit()
             result_message = f"Hotels for {search_text} now added in database"
 
-        if update_type == "post_log":
-            message = request.json.get('message')
-            status = request.json.get('status')
-
-            log_item = LogDetails(message, status)
-            db.session.add(log_item)
-            db.session.commit()
-
         return jsonify({"message": result_message}), 200
     except Exception as err:
         print(err)
@@ -91,7 +104,8 @@ def get_locations():
         location_json.append({
             "id": location.id,
             "search_key": location.search_text,
-            "count": location.children.count()
+            "count": location.children.count(),
+            "queue_code": location.queue_id
         })
 
     return jsonify({"locations": location_json}), 200
@@ -135,20 +149,11 @@ def get_hotels():
     return jsonify({"message": "No hotels found"}), 404
 
 
-def start_scraping(search_text):
-    new_task = SearchQueue(search_text)
-
-    o = urlparse(request.base_url)
+def start_scraping(search_text, code):
     current_host = f"{request.headers.get('Host')}"
 
-    db.session.add(new_task)
-    db.session.commit()
-
-    command = f"python ./backend/scraper/__init__.py {search_text} {current_host}"
-    process = subprocess.Popen(command, shell=True)
-    result = process.wait()
-
-    return result
+    command = f"python ./backend/scraper/__init__.py {search_text} {current_host} {code}"
+    subprocess.Popen(command, shell=True)
 
 
 @api_routes.route('/start-scraping', methods=["POST"])
@@ -158,38 +163,26 @@ def scrape_precheck():
     check_status = SearchQueue.query.filter_by(search_text=search_text).order_by(
         SearchQueue.created_date.desc()).first()
     if check_status is None or (check_status.status != "ONGOING"):
-        result = start_scraping(search_text)
+        code = generate_unique_code(6)
+        encoded_search_text = urllib.parse.quote_plus(search_text)
+        start_scraping(encoded_search_text, code)
 
-        if result == 0:
-            hotel_list = getHotels(search_text, "all")
+        # save tasks to database
+        search_item = SearchQueue(queue_id=code,
+                                  search_text=search_text)
+        db.session.add(search_item)
 
-            if hotel_list:
-                return jsonify({"message": "Scraping successfull", "count": len(hotel_list['hotels'])}), 200
-            else:
-                return jsonify({"message": "There are no hotels for this search key", "count": 0}), 200
-        else:
-            check_status = SearchQueue.query.filter_by(search_text=search_text).order_by(
-        SearchQueue.created_date.desc()).first()
-            
-            if check_status:
-                check_status.status = "ERROR"
-                db.session.commit()
-            return jsonify({"message": "There's an error occured while searching the key. Please try it again"}), 500
+        # inject search key if exists
+        search_key = HotelSearchKeys.query.filter_by(
+            search_text=search_text).first()
+        if search_key:
+            search_key.queue_id = code
+
+        db.session.commit()
+
+        return jsonify({"message": "Scraping now started", "queue_id": code}), 200
     else:
         return jsonify({"message": "An existing scraping task is still ongoing. Please try again later"}), 500
-
-@api_routes.route('/end-scraping', methods=["POST"])
-def end_scraping():
-    search_text = request.json.get('search_text')
-    check_status = SearchQueue.query.filter_by(search_text=search_text).order_by(
-        SearchQueue.created_date.desc()).first()
-
-    if check_status:
-        check_status.status = "FINISHED"
-        db.session.commit()
-        return jsonify({"message": f"Scraping for {search_text} is now finished"}), 200
-
-    return jsonify({"message": "An error occured during scraping"}), 500
 
 
 @api_routes.route('/download-file', methods=['GET'])
@@ -211,15 +204,73 @@ def download_file():
     return jsonify({"message": "An error occured during download"}), 500
 
 
-@api_routes.route('/delete-location', methods=['POST'])
-def delete_location():
-    search_text = request.json.get('search_text')
+def delete_location(search_text):
     check_location = HotelSearchKeys.query.filter_by(
         search_text=search_text).first()
     if check_location:
         db.session.delete(check_location)
         db.session.commit()
+        return True
+    else:
+        return False
 
+
+@api_routes.route('/delete-location', methods=['POST'])
+def delete_location_api():
+    search_text = request.json.get('search_text')
+    start_delete = delete_location(search_text)
+    if start_delete:
         return jsonify({"message": "Search key now deleted"}), 200
     else:
         return jsonify({"message": "An error occured while deleting this search item"}), 500
+
+
+def report_to_socket(queue_id, message, status):
+    task = SearchQueue.query.filter_by(queue_id=queue_id).first()
+    if task:
+        search_text = task.search_text
+
+        task.status = status
+        task.details = message
+
+        count = 0
+        location = HotelSearchKeys.query.filter_by(
+            search_text=search_text).first()
+
+        if location:
+            count = location.children.count()
+            location.queue_id = None  # clear queue_id on complete
+
+        if status == "ERROR" and location.base_url is None:
+            delete_location(search_text)
+
+        db.session.commit()
+        socket_io.send((count, queue_id, status))
+        return True
+    else:
+        return False
+
+
+@api_routes.route('/report', methods=["POST"])
+def report_result():
+    queue_id = request.json.get('queue_id')
+    message = request.json.get('message')
+    status = request.json.get('status')
+
+    report_to_socket(queue_id, message, status)
+    if report_to_socket:
+        return jsonify({"message": "Scraping finished"}), 200
+    else:
+        return jsonify({"message": "Error when receiving report from worker"}), 500
+
+
+@api_routes.route('/progress', methods=["POST"])
+def progress_task():
+    queue_id = request.json.get('queue_id')
+    progress = request.json.get('progress')
+
+    socket_io.emit("progress", (queue_id, progress))
+    status = f"Task {queue_id} progressed to {progress} out of 5 steps"
+
+    print(status)
+    return jsonify({"message": status}), 200

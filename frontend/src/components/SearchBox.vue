@@ -1,6 +1,10 @@
 <template>
   <div class="border-gray-400 border-b-2 p-4" id="top">
-    <form @submit.prevent="formSubmit" class="flex justify-between">
+    <form
+      @submit.prevent="formSubmit"
+      class="flex justify-between"
+      autocomplete="off"
+    >
       <input
         type="text"
         id="searchBox"
